@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iGreen — Relatório de Tickets</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --blue: #185FA5; --teal: #0F6E56; --coral: #D85A30; --amber: #BA7517;
+    --red: #A32D2D; --green: #1D9E75; --gray: #888780; --lgray: #C8C5BE;
+    --dark: #1E1D1B; --bg: #F7F6F2; --card: #FFFFFF; --border: #E2E0D8;
+    --lb: #E6F1FB; --lt: #E1F5EE; --lc: #FAECE7; --la: #FAEEDA; --lr: #FCEBEB;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--dark); font-size: 14px; line-height: 1.55; }
+  .site-header { background: var(--dark); color: #fff; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .site-header .logo { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
+  .site-header .meta { font-size: 12px; color: #aaa8a2; }
+  .hero { background: linear-gradient(135deg, #0D1B2A 0%, #1B3A5C 60%, #0F6E56 100%); color: #fff; padding: 2.4rem 2rem 2rem; }
+  .hero-inner { max-width: 1140px; margin: 0 auto; }
+  .hero h1 { font-size: clamp(1.5rem, 3.4vw, 2.2rem); font-weight: 700; }
+  .hero h1 span { color: #7EC8A8; }
+  .hero-sub { font-size: 13px; color: #aecfc4; margin: .4rem 0 1.6rem; }
+  .hero-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .hero-kpi { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: .9rem 1rem; }
+  .hero-kpi-label { font-size: 11px; color: #aecfc4; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .05em; }
+  .hero-kpi-val { font-size: 1.7rem; font-weight: 700; }
+  .container { max-width: 1140px; margin: 0 auto; padding: 0 2rem; }
+  .tabs-wrap { background: var(--card); border-bottom: 2px solid var(--border); position: sticky; top: 56px; z-index: 90; }
+  .tabs { max-width: 1140px; margin: 0 auto; padding: 0 2rem; display: flex; gap: 0; overflow-x: auto; }
+  .tab { padding: .85rem 1.3rem; font-size: 13px; font-weight: 500; color: var(--gray); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+  .tab:hover { color: var(--dark); }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
+  .section { display: none; padding: 1.8rem 0 3rem; }
+  .section.active { display: block; }
+  .sec-header { display: flex; align-items: center; gap: 10px; margin-bottom: .3rem; flex-wrap: wrap; }
+  .sec-title { font-size: 17px; font-weight: 700; }
+  .sec-badge { font-size: 11px; padding: 3px 9px; border-radius: 20px; font-weight: 600; }
+  .badge-blue { background: var(--lb); color: var(--blue); }
+  .badge-coral { background: var(--lc); color: var(--coral); }
+  .sec-desc { font-size: 13px; color: #666; margin: .3rem 0 1.2rem; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.6rem; }
+  .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
+  .kpi-label { font-size: 11.5px; color: #777; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
+  .kpi-value { font-size: 1.6rem; font-weight: 700; }
+  .kpi-sub { font-size: 11.5px; color: #999; margin-top: 2px; }
+  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.3rem; margin-bottom: 1.4rem; }
+  .chart-card h3 { font-size: 14.5px; margin-bottom: 2px; }
+  .chart-card p { font-size: 12.5px; color: #888; margin-bottom: .8rem; }
+  .chart-wrap { position: relative; }
+  .tbl-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: #F1EFE8; font-weight: 600; color: #555; font-size: 11.5px; text-transform: uppercase; }
+  .alert { display: flex; gap: 10px; padding: .9rem 1.1rem; border-radius: 10px; font-size: 13px; margin-bottom: 1.2rem; }
+  .alert-amber { background: var(--la); color: #7a5510; }
+  .picos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 1.2rem; }
+  .pico-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: .8rem; display: flex; gap: 10px; align-items: center; }
+  .pico-rank { width: 26px; height: 26px; border-radius: 50%; background: var(--lgray); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+  .pico-rank.r1 { background: var(--red); } .pico-rank.r2 { background: var(--coral); } .pico-rank.r3 { background: var(--amber); }
+  .pico-val { font-weight: 700; font-size: 1.1rem; }
+  .pico-date { font-size: 11px; color: #888; }
+  .empty-state, .error-state { text-align: center; padding: 3rem 1rem; color: #999; }
+  .error-state { color: var(--red); }
+  footer { text-align: center; font-size: 11.5px; color: #999; padding: 1.5rem 0 2rem; }
+  .loading-wrap { text-align: center; padding: 4rem 1rem; color: #888; }
+  .spinner { width: 34px; height: 34px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; margin: 0 auto 1rem; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="logo"><span class="logo-dot"></span> iGreen Energy · Tickets</div>
+  <div class="meta" id="updatedAtLabel"></div>
+</header>
+
+<div class="hero">
+  <div class="hero-inner">
+    <h1>Performance de <span>Fornecedoras</span></h1>
+    <p class="hero-sub">Relatório de tickets — atualizado automaticamente a partir da base do time.</p>
+    <div class="hero-kpis" id="heroKpis"></div>
+  </div>
+</div>
+
+<div id="root">
+  <div class="loading-wrap"><div class="spinner"></div>Carregando dados…</div>
+</div>
+
+<footer id="footerNote"></footer>
+
+<script>
+/* ======================================================
+   Ajuste só esta linha com a URL do seu Web App do Apps Script
+   (terminada em /exec), publicado com acesso "Qualquer pessoa".
+   ====================================================== */
+const API_URL = 'COLE_AQUI_A_URL_DO_SEU_APPS_SCRIPT/exec';
+
+const BLUE='#185FA5', TEAL='#0F6E56', CORAL='#D85A30', AMBER='#BA7517',
+      RED='#A32D2D', GREEN='#1D9E75', GRAY='#888780', LGRAY='#C8C5BE';
+const gridC = 'rgba(0,0,0,0.06)';
+
+function fmt(n){ return Number(n||0).toLocaleString('pt-BR'); }
+function fmtPct(n){ return Number(n||0).toLocaleString('pt-BR', {maximumFractionDigits:1}) + '%'; }
+
+let DATA = null;
+
+async function loadData(){
+  try {
+    const res = await fetch(API_URL + (API_URL.includes('?') ? '&' : '?') + 'format=json');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    DATA = await res.json();
+    boot();
+  } catch (err) {
+    document.getElementById('root').innerHTML =
+      '<div class="container"><div class="error-state">Não consegui carregar os dados.<br>' +
+      'Confira se a URL do Apps Script em <code>API_URL</code> está correta e se o Web App está publicado com acesso "Qualquer pessoa".<br>' +
+      '<small>' + err.message + '</small></div></div>';
+  }
+}
+
+function boot(){
+  document.getElementById('root').innerHTML = `
+    <div class="tabs-wrap"><div class="tabs" id="tabsBar"></div></div>
+    <div class="container" id="sectionsContainer"></div>
+  `;
+  renderHero();
+  buildShell();
+  sections[0].render();
+  rendered[sections[0].id] = true;
+}
+
+/* ---------- HERO KPIs ---------- */
+function renderHero(){
+  const totalAbertos = DATA.months.reduce((s,m)=>s+m.abertos,0);
+  const totalFinalizados = DATA.months.reduce((s,m)=>s+m.finalizados,0);
+  const el = document.getElementById('heroKpis');
+  el.innerHTML = [
+    ['Total de tickets', fmt(DATA.totalTickets), ''],
+    ['Abertos no período', fmt(totalAbertos), ''],
+    ['Finalizados no período', fmt(totalFinalizados), ''],
+    ['Fornecedoras', fmt(DATA.fornecedoras.length), DATA.fornecedoras.join(', ')]
+  ].map(([label,val,sub]) => `
+    <div class="hero-kpi">
+      <div class="hero-kpi-label">${label}</div>
+      <div class="hero-kpi-val">${val}</div>
+      ${sub ? `<div style="font-size:11px;color:#88b5a2;margin-top:2px">${sub}</div>` : ''}
+    </div>`).join('');
+
+  document.getElementById('updatedAtLabel').textContent =
+    'Base: ' + fmt(DATA.totalTickets) + ' tickets · atualizado ' + new Date(DATA.updatedAt).toLocaleString('pt-BR');
+  document.getElementById('footerNote').textContent =
+    'iGreen Energy — BKO · Dashboard público via GitHub Pages · ' + fmt(DATA.totalTickets) + ' tickets na base';
+}
+
+/* ---------- TABS / SECTIONS ---------- */
+let sections = [];
+const rendered = {};
+
+function buildShell(){
+  sections = [];
+  sections.push({ id: 'geral', label: 'Visão Geral', render: renderGeral });
+  DATA.months.forEach(m => sections.push({ id: 'm-' + m.key, label: m.label, render: () => renderMes(m) }));
+  sections.push({ id: 'sla', label: 'SLA & Tempos', render: renderSla });
+  sections.push({ id: 'picos', label: 'Picos & Semanas', render: renderPicos });
+  sections.push({ id: 'reab', label: 'Reaberturas', render: renderReab });
+
+  document.getElementById('tabsBar').innerHTML = sections.map((s,i) =>
+    `<div class="tab${i===0?' active':''}" data-id="${s.id}">${s.label}</div>`).join('');
+  document.getElementById('sectionsContainer').innerHTML = sections.map((s,i) =>
+    `<div class="section${i===0?' active':''}" id="tab-${s.id}"></div>`).join('');
+
+  document.querySelectorAll('.tab').forEach(tabEl => {
+    tabEl.addEventListener('click', () => showTab(tabEl.dataset.id));
+  });
+}
+
+function showTab(id){
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  document.querySelector('.tab[data-id="' + id + '"]').classList.add('active');
+  if (!rendered[id]) {
+    const s = sections.find(s => s.id === id);
+    s.render();
+    rendered[id] = true;
+  }
+}
+
+/* ---------- VISÃO GERAL ---------- */
+function renderGeral(){
+  const el = document.getElementById('tab-geral');
+  if (DATA.months.length === 0) {
+    el.innerHTML = '<div class="empty-state">Ainda não há dados na base.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="sec-header"><span class="sec-title">Volume mensal</span><span class="sec-badge badge-blue">${DATA.months[0].label} – ${DATA.months[DATA.months.length-1].label}</span></div>
+    <p class="sec-desc">Tickets abertos, finalizados e com resposta da fornecedora, por mês.</p>
+    <div class="chart-card"><div class="chart-wrap" style="height:280px"><canvas id="chartMensal"></canvas></div></div>
+    <div class="sec-header"><span class="sec-title">Top 15 tipos de ticket</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Tipo</th><th>Quantidade</th><th>% do total</th></tr></thead>
+      <tbody>${DATA.topTipos.map(t => `<tr><td>${t.tipo}</td><td>${fmt(t.qtd)}</td><td>${fmtPct(t.qtd/DATA.totalTickets*100)}</td></tr>`).join('')}</tbody>
+    </table></div>
+  `;
+  new Chart(document.getElementById('chartMensal'), {
+    type: 'bar',
+    data: {
+      labels: DATA.months.map(m => m.label),
+      datasets: [
+        { label: 'Abertos', data: DATA.months.map(m => m.abertos), backgroundColor: BLUE },
+        { label: 'Finalizados', data: DATA.months.map(m => m.finalizados), backgroundColor: TEAL },
+        { label: 'Respostas fornecedora', data: DATA.months.map(m => m.respostas), backgroundColor: CORAL }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
+  });
+}
+
+/* ---------- POR MÊS ---------- */
+function renderMes(m){
+  const el = document.getElementById('tab-m-' + m.key);
+  const dias = DATA.daily[m.key] || [];
+  el.innerHTML = `
+    <div class="sec-header"><span class="sec-title">${m.label}</span></div>
+    <div class="kpi-grid">
+      <div class="kpi-card" style="border-left:4px solid ${BLUE}"><div class="kpi-label">Abertos</div><div class="kpi-value">${fmt(m.abertos)}</div></div>
+      <div class="kpi-card" style="border-left:4px solid ${TEAL}"><div class="kpi-label">Finalizados</div><div class="kpi-value">${fmt(m.finalizados)}</div></div>
+      <div class="kpi-card" style="border-left:4px solid ${CORAL}"><div class="kpi-label">Respostas fornecedora</div><div class="kpi-value">${fmt(m.respostas)}</div></div>
+    </div>
+    <div class="chart-card"><h3>Tickets abertos por dia</h3>
+      <div class="chart-wrap" style="height:260px"><canvas id="chartDia-${m.key}"></canvas></div>
+    </div>
+  `;
+  new Chart(document.getElementById('chartDia-' + m.key), {
+    type: 'bar',
+    data: { labels: dias.map(d => d.date), datasets: [{ data: dias.map(d => d.value),
+      backgroundColor: dias.map(d => d.value >= 100 ? RED : d.value >= 60 ? AMBER : BLUE), borderRadius: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { maxRotation: 45, font: { size: 9 } }, grid: { display: false } }, y: { grid: { color: gridC } } } }
+  });
+}
+
+/* ---------- SLA & TEMPOS ---------- */
+function renderSla(){
+  const el = document.getElementById('tab-sla');
+  const bucketOrder = ['0–7 dias','8–30 dias','31–90 dias','90+ dias'];
+  const fornecedoras = DATA.fornecedoras;
+  const byBucket = {};
+  bucketOrder.forEach(b => byBucket[b] = 0);
+  DATA.slaTable.forEach(r => { byBucket[r.bucket] = (byBucket[r.bucket]||0) + r.count; });
+  const totalAbertos = Object.values(byBucket).reduce((a,b)=>a+b,0);
+
+  el.innerHTML = `
+    <div class="sec-header"><span class="sec-title">Tickets em aberto por tempo de espera</span></div>
+    <p class="sec-desc">${fmt(totalAbertos)} tickets ainda em aberto na base, agrupados por dias desde a criação.</p>
+    <div class="chart-card"><div class="chart-wrap" style="height:260px"><canvas id="chartSla"></canvas></div></div>
+    <div class="sec-header"><span class="sec-title">Detalhe por fornecedora</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Fornecedora</th><th>0–7 dias</th><th>8–30 dias</th><th>31–90 dias</th><th>90+ dias</th><th>Total</th></tr></thead>
+      <tbody>${fornecedoras.map(f => {
+        const vals = bucketOrder.map(b => (DATA.slaTable.find(r => r.fornecedora===f && r.bucket===b) || {}).count || 0);
+        const total = vals.reduce((a,b)=>a+b,0);
+        return `<tr><td>${f}</td>${vals.map(v=>`<td>${fmt(v)}</td>`).join('')}<td><strong>${fmt(total)}</strong></td></tr>`;
+      }).join('')}</tbody>
+    </table></div>
+  `;
+  new Chart(document.getElementById('chartSla'), {
+    type: 'bar',
+    data: { labels: bucketOrder, datasets: [{ data: bucketOrder.map(b => byBucket[b]),
+      backgroundColor: [GREEN, AMBER, CORAL, RED], borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
+  });
+}
+
+/* ---------- PICOS & SEMANAS ---------- */
+function renderPicos(){
+  const el = document.getElementById('tab-picos');
+  el.innerHTML = `
+    <div class="sec-header"><span class="sec-title">Top 10 dias com mais respostas da fornecedora</span></div>
+    <div class="picos-grid">${DATA.topDiasResposta.map((p,i) => `
+      <div class="pico-card">
+        <div class="pico-rank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div>
+        <div class="pico-info"><div class="pico-val">${fmt(p.count)}</div><div class="pico-date">${p.date}</div></div>
+      </div>`).join('')}</div>
+
+    <div class="chart-card"><h3>Taxa de finalização por semana</h3>
+      <p>Finalizados ÷ abertos na mesma semana ISO.</p>
+      <div class="chart-wrap" style="height:260px"><canvas id="chartTaxaSemana"></canvas></div>
+    </div>
+    <div class="chart-card"><h3>Respostas da fornecedora por semana</h3>
+      <div class="chart-wrap" style="height:260px"><canvas id="chartRespSemana"></canvas></div>
+    </div>
+
+    <div class="sec-header"><span class="sec-title">Tabela completa — por semana</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Semana</th><th>Abertos</th><th>Finalizados</th><th>Respostas</th><th>Taxa fin.</th><th>vs semana ant.</th></tr></thead>
+      <tbody>${DATA.weekly.map(w => `<tr><td>${w.label}</td><td>${fmt(w.abertos)}</td><td>${fmt(w.finalizados)}</td><td>${fmt(w.respostas)}</td><td>${fmtPct(w.taxaFin)}</td><td>${w.variacaoRespostas===null?'—':(w.variacaoRespostas>=0?'+':'')+w.variacaoRespostas+'%'}</td></tr>`).join('')}</tbody>
+    </table></div>
+  `;
+  new Chart(document.getElementById('chartTaxaSemana'), {
+    type: 'bar',
+    data: { labels: DATA.weekly.map(w => w.label), datasets: [{ data: DATA.weekly.map(w => w.taxaFin),
+      backgroundColor: DATA.weekly.map(w => w.taxaFin>=70?GREEN:w.taxaFin>=40?AMBER:RED), borderRadius: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { maxRotation: 45 }, grid: { display: false } }, y: { ticks: { callback: v=>v+'%' }, grid: { color: gridC }, max: 110 } } }
+  });
+  new Chart(document.getElementById('chartRespSemana'), {
+    type: 'bar',
+    data: { labels: DATA.weekly.map(w => w.label), datasets: [{ data: DATA.weekly.map(w => w.respostas), backgroundColor: BLUE, borderRadius: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { maxRotation: 45 }, grid: { display: false } }, y: { grid: { color: gridC } } } }
+  });
+}
+
+/* ---------- REABERTURAS ---------- */
+function renderReab(){
+  const el = document.getElementById('tab-reab');
+  const r = DATA.reaberturas;
+  el.innerHTML = `
+    <div class="sec-header"><span class="sec-title">Reaberturas de Tickets</span><span class="sec-badge badge-coral">análise de recorrência</span></div>
+    <p class="sec-desc">Clientes que abriram múltiplos tickets — com tipos diferentes ou o mesmo tipo repetido.</p>
+    <div class="alert alert-amber">🔄 <div><strong>${fmt(r.clientesRecorrentes)} clientes</strong> abriram 2 ou mais tickets no período.
+      Desses, <strong>${fmt(r.mesmoTipoRepetido)} pares</strong> cliente+tipo se repetiram.</div></div>
+    <div class="kpi-grid">
+      <div class="kpi-card" style="border-left:4px solid ${CORAL}"><div class="kpi-label">Clientes com 2+ tickets</div><div class="kpi-value">${fmt(r.clientesRecorrentes)}</div><div class="kpi-sub">de ${fmt(r.totalClientes)} clientes totais</div></div>
+      <div class="kpi-card"><div class="kpi-label">Tickets nesses clientes</div><div class="kpi-value">${fmt(r.ticketsNessesClientes)}</div><div class="kpi-sub">${fmtPct(r.pctTicketsNessesClientes)} de todos os tickets</div></div>
+      <div class="kpi-card" style="border-left:4px solid ${RED}"><div class="kpi-label">Mesmo tipo repetido</div><div class="kpi-value">${fmt(r.mesmoTipoRepetido)}</div><div class="kpi-sub">pares cliente+tipo com 2+ tickets</div></div>
+      <div class="kpi-card"><div class="kpi-label">Tickets em repetição</div><div class="kpi-value">${fmt(r.ticketsRepeticao)}</div><div class="kpi-sub">mesmo problema, abertura nova</div></div>
+      <div class="kpi-card" style="border-left:4px solid ${RED}"><div class="kpi-label">Clientes com 5+ tickets</div><div class="kpi-value">${fmt(r.clientes5mais)}</div><div class="kpi-sub">alta recorrência</div></div>
+      <div class="kpi-card" style="border-left:4px solid ${RED}"><div class="kpi-label">Clientes com 8+ tickets</div><div class="kpi-value">${fmt(r.clientes8mais)}</div><div class="kpi-sub">casos críticos</div></div>
+    </div>
+  `;
+}
+
+loadData();
+</script>
+</body>
+</html>
