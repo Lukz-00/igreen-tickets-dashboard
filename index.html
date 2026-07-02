@@ -44,6 +44,15 @@
   .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.6rem; }
   .ggrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.6rem; }
   .cgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 1.6rem; }
+  .mbar-cell { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .mbar-track { width: 60px; height: 8px; background: #EFEDE6; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+  .mbar-fill { height: 100%; border-radius: 4px; }
+  .mbar-val { font-size: 11.5px; font-weight: 600; min-width: 22px; }
+  .tipo-link { color: var(--blue); font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  #modalOverlay2 { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 210; align-items: center; justify-content: center; padding: 20px; }
+  #modalOverlay2.open { display: flex; }
+  #modalBox2 { background: var(--card); border-radius: 14px; width: 100%; max-width: 1080px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,.3); }
+  #modalBody2 { flex: 1; overflow-y: auto; padding: 16px 20px; }
   .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
   .kpi-label { font-size: 11.5px; color: #777; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
   .kpi-value { font-size: 1.6rem; font-weight: 700; }
@@ -166,6 +175,85 @@ function wireModalHandlers(){
     const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tickets-igreen.csv'; a.click();
   });
+  document.getElementById('modalCloseBtn2').addEventListener('click', () => document.getElementById('modalOverlay2').classList.remove('open'));
+  document.getElementById('modalOverlay2').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open'); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { const ov2 = document.getElementById('modalOverlay2'); if (ov2) ov2.classList.remove('open'); } });
+}
+
+/* ---------- MODAL 2 (drill-down tipo → distribuidora) ---------- */
+const CHARTS_MODAL2 = {};
+function destroyChart2_(id){ if (CHARTS_MODAL2[id]) { CHARTS_MODAL2[id].destroy(); delete CHARTS_MODAL2[id]; } }
+function miniBar_(val, max, color){
+  const pct = max > 0 ? Math.round((val / max) * 100) : 0;
+  return `<div class="mbar-cell"><div class="mbar-track"><div class="mbar-fill" style="width:${pct}%;background:${color}"></div></div><span class="mbar-val">${fmt(val)}</span></div>`;
+}
+function variacaoHtml_(pct, label){
+  if (pct === null) return `<span style="color:${BLUE};font-weight:700">novo</span>`;
+  if (label === 'alta') return `<span style="color:${CORAL};font-weight:700">▲ +${fmtPct(pct)}</span>`;
+  if (label === 'baixa') return `<span style="color:${GREEN};font-weight:700">▼ ${fmtPct(pct)}</span>`;
+  return `<span style="color:${GRAY}">→ estável</span>`;
+}
+const MONTH_COLORS = [BLUE, '#7C3AED', AMBER, GREEN, CORAL, '#0891B2'];
+
+function openTipoModal_(linha){
+  document.getElementById('modalTitle2').textContent = linha.tipo + ' — por distribuidora';
+  document.getElementById('modalSub2').textContent = 'Abertura de chamados por distribuidora · Últimas 2 sem: ' + DATA.tipoTabela.rangeAtual;
+  const monthLabels = DATA.tipoTabela.monthLabels;
+  const maxAtual = Math.max(...linha.porDistribuidora.map(d => Math.max(d.atual, d.anterior)), 1);
+  const maxMes = Math.max(...linha.porDistribuidora.flatMap(d => d.porMes), 1);
+  const body = document.getElementById('modalBody2');
+  body.innerHTML = `
+    <div class="cgrid" style="margin-bottom:1.2rem">
+      <div class="chart-card"><h3>${linha.tipo} — últimas 2 semanas por distribuidora</h3>
+        <div class="chart-wrap" style="height:240px"><canvas id="miniDistBar"></canvas></div></div>
+      <div class="chart-card"><h3>${linha.tipo} — evolução mensal por distribuidora</h3>
+        <div class="chart-wrap" style="height:240px"><canvas id="miniDistLine"></canvas></div></div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Distribuidora</th><th>Últ. 2 sem</th><th>2 sem ant.</th><th>Variação</th>${monthLabels.map(l=>`<th>${l}</th>`).join('')}<th>Total</th><th>Em aberto</th></tr></thead>
+      <tbody>${linha.porDistribuidora.map((d,i) => `<tr class="cc" data-dist-i="${i}">
+        <td>${d.distribuidora}</td>
+        <td>${miniBar_(d.atual, maxAtual, d.atual>=d.anterior*1.5&&d.anterior>0?RED:BLUE)}</td>
+        <td>${miniBar_(d.anterior, maxAtual, LGRAY)}</td>
+        <td>${variacaoHtml_(d.variacaoPct, d.variacaoLabel)}</td>
+        ${d.porMes.map((v,mi)=>`<td>${miniBar_(v, maxMes, MONTH_COLORS[mi%MONTH_COLORS.length])}</td>`).join('')}
+        <td><strong>${fmt(d.total)}</strong></td>
+        <td>${fmt(d.emAberto)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  `;
+  const top = linha.porDistribuidora.slice(0, 8);
+  destroyChart2_('miniDistBar');
+  CHARTS_MODAL2['miniDistBar'] = new Chart(document.getElementById('miniDistBar'), {
+    type: 'bar',
+    data: { labels: top.map(d => d.distribuidora), datasets: [
+      { label: 'Últ. 2 sem.', data: top.map(d => d.atual), backgroundColor: BLUE, borderRadius: 4 },
+      { label: '2 sem. ant.', data: top.map(d => d.anterior), backgroundColor: LGRAY, borderRadius: 4 }
+    ] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } },
+      scales: { x: { grid: { color: gridC } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+  });
+  destroyChart2_('miniDistLine');
+  const top6 = linha.porDistribuidora.slice(0, 6);
+  CHARTS_MODAL2['miniDistLine'] = new Chart(document.getElementById('miniDistLine'), {
+    type: 'line',
+    data: { labels: monthLabels, datasets: top6.map((d,i) => ({
+      label: d.distribuidora, data: d.porMes, borderColor: MONTH_COLORS[i % MONTH_COLORS.length],
+      backgroundColor: MONTH_COLORS[i % MONTH_COLORS.length], tension: .35, pointRadius: 4, fill: false
+    })) },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 } } } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
+  });
+  body.querySelectorAll('[data-dist-i]').forEach(row => {
+    row.addEventListener('click', () => {
+      const d = linha.porDistribuidora[parseInt(row.dataset.distI)];
+      const tix = DATA.allTickets.filter(t => t.tipo === linha.tipo && (t.distribuidora && t.distribuidora !== '-' ? t.distribuidora : 'Sem distribuidora') === d.distribuidora);
+      openModal(linha.tipo + ' — ' + d.distribuidora, tix, [['blue', fmt(tix.length) + ' tickets']]);
+    });
+  });
+  document.getElementById('modalOverlay2').classList.add('open');
 }
 
 let DATA = null;
@@ -206,6 +294,20 @@ function boot(){
           <span id="modalCount"></span>
           <button class="btn btn-primary" id="modalExportBtn">⬇ Exportar CSV</button>
         </div>
+      </div>
+    </div>
+  `);
+  document.getElementById('root').insertAdjacentHTML('beforeend', `
+    <div id="modalOverlay2">
+      <div id="modalBox2">
+        <div class="modal-hdr">
+          <div>
+            <div class="modal-title" id="modalTitle2"></div>
+            <div style="font-size:12px;color:#888;margin-top:3px" id="modalSub2"></div>
+          </div>
+          <button class="modal-close" id="modalCloseBtn2">&times;</button>
+        </div>
+        <div id="modalBody2"></div>
       </div>
     </div>
   `);
@@ -308,15 +410,26 @@ function renderGeral(){
     </table></div>
 
     <div class="sec-header"><span class="sec-title">Tipos mais abertos — tendência e comparativo mensal</span></div>
-    <p class="sec-desc">${DATA.tipoQuinzenal ? `Últimas 2 semanas: <strong>${DATA.tipoQuinzenal.rangeAtual}</strong> · 2 semanas anteriores: <strong>${DATA.tipoQuinzenal.rangeAnterior}</strong> · 🔴 = volume aumentou ≥50% nas últimas 2 semanas (gargalo em crescimento)` : ''}</p>
-    <div class="cgrid">
-      <div class="chart-card"><h3>Top tipos — últimas 2 semanas</h3><p>Comparado às 2 semanas anteriores. Clique numa barra para ver os tickets.</p>
-        <div class="chart-wrap" style="height:260px"><canvas id="chartTipo2w"></canvas></div>
-      </div>
-      <div class="chart-card"><h3>Evolução mensal — top 6 tipos</h3><p>Tendência mês a mês.</p>
-        <div class="chart-wrap" style="height:260px"><canvas id="chartTipoEvol"></canvas></div>
-      </div>
-    </div>
+    <p class="sec-desc">${DATA.tipoTabela ? `Últimas 2 semanas: <strong>${DATA.tipoTabela.rangeAtual}</strong> · 2 semanas anteriores: <strong>${DATA.tipoTabela.rangeAnterior}</strong> · clique no nome do tipo para detalhar por distribuidora` : ''}</p>
+    <div class="tbl-wrap" style="margin-bottom:1.6rem"><table>
+      <thead><tr>
+        <th>Tipo de chamado</th><th>Últ. 2 sem</th><th>2 sem. ant.</th><th>Variação</th>
+        ${(DATA.tipoTabela ? DATA.tipoTabela.monthLabels : []).map(l => `<th>${l}</th>`).join('')}
+        <th>Total geral</th>
+      </tr></thead>
+      <tbody>${(DATA.tipoTabela ? DATA.tipoTabela.linhas : []).map((t,i) => {
+        const maxAtual = Math.max(...(DATA.tipoTabela.linhas.map(x => Math.max(x.atual, x.anterior))), 1);
+        const maxMes = Math.max(...(DATA.tipoTabela.linhas.flatMap(x => x.porMes)), 1);
+        return `<tr>
+          <td><span class="tipo-link" data-tipo-i="${i}">${t.gargalo ? '🔴 ' : ''}${t.tipo}</span></td>
+          <td>${miniBar_(t.atual, maxAtual, t.gargalo ? RED : BLUE)}</td>
+          <td>${miniBar_(t.anterior, maxAtual, LGRAY)}</td>
+          <td>${variacaoHtml_(t.variacaoPct, t.variacaoLabel)}</td>
+          ${t.porMes.map((v,mi) => `<td>${miniBar_(v, maxMes, MONTH_COLORS[mi%MONTH_COLORS.length])}</td>`).join('')}
+          <td><strong>${fmt(t.total)}</strong></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
 
     <div class="sec-header"><span class="sec-title">Visão geral do período</span></div>
     <div class="cgrid">
@@ -357,50 +470,11 @@ function renderGeral(){
       scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
   });
 
-  /* --- Tipos mais abertos: comparativo últimas 2 semanas --- */
-  const q = DATA.tipoQuinzenal && DATA.tipoQuinzenal.itens ? DATA.tipoQuinzenal.itens : [];
-  new Chart(document.getElementById('chartTipo2w'), {
-    type: 'bar',
-    data: {
-      labels: q.map(t => t.tipo.length > 22 ? t.tipo.slice(0,22)+'…' : t.tipo),
-      datasets: [
-        { label: 'Últ. 2 sem.', data: q.map(t => t.atual), backgroundColor: q.map(t => t.gargalo ? RED : BLUE), borderRadius: 4 },
-        { label: '2 sem. ant.', data: q.map(t => t.anterior), backgroundColor: LGRAY, borderRadius: 4 }
-      ]
-    },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } },
-      scales: { x: { grid: { color: gridC } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } },
-      onClick: (evt, els) => {
-        if (!els.length) return;
-        const tipo = q[els[0].index].tipo;
-        openModal('Tipo: ' + tipo, DATA.allTickets.filter(t => t.tipo === tipo), [['blue', 'tickets no período completo']]);
-      }
-    }
-  });
-
-  /* --- Evolução mensal: top 6 tipos --- */
-  const top6 = (DATA.tipoTrends || []).slice(0, 6);
-  const evolColors = [BLUE, CORAL, AMBER, GREEN, '#7C3AED', '#0891B2'];
-  new Chart(document.getElementById('chartTipoEvol'), {
-    type: 'line',
-    data: {
-      labels: DATA.months.map(m => m.label),
-      datasets: top6.map((t,i) => ({
-        label: t.tipo.length > 18 ? t.tipo.slice(0,18)+'…' : t.tipo,
-        data: t.serie, borderColor: evolColors[i % evolColors.length],
-        backgroundColor: evolColors[i % evolColors.length], tension: .35, pointRadius: 4, fill: false
-      }))
-    },
-    options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 } } } },
-      scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } },
-      onClick: (evt, els) => {
-        if (!els.length) return;
-        const tipo = top6[els[0].datasetIndex].tipo;
-        openModal('Tipo: ' + tipo, DATA.allTickets.filter(t => t.tipo === tipo), [['blue', 'tickets no período completo']]);
-      }
-    }
+  el.querySelectorAll('[data-tipo-i]').forEach(link => {
+    link.addEventListener('click', () => {
+      const linha = DATA.tipoTabela.linhas[parseInt(link.dataset.tipoI)];
+      openTipoModal_(linha);
+    });
   });
 
   /* --- Visão geral: volume / taxa fin. / top tipos --- */
