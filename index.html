@@ -42,6 +42,7 @@
   .badge-coral { background: var(--lc); color: var(--coral); }
   .sec-desc { font-size: 13px; color: #666; margin: .3rem 0 1.2rem; }
   .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.6rem; }
+  .ggrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.6rem; }
   .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
   .kpi-label { font-size: 11.5px; color: #777; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
   .kpi-value { font-size: 1.6rem; font-weight: 700; }
@@ -63,6 +64,20 @@
   .pico-val { font-weight: 700; font-size: 1.1rem; }
   .pico-date { font-size: 11px; color: #888; }
   .empty-state, .error-state { text-align: center; padding: 3rem 1rem; color: #999; }
+  .cc { cursor: pointer; color: var(--blue); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+  #modalOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+  #modalOverlay.open { display: flex; }
+  #modalBox { background: var(--card); border-radius: 14px; width: 100%; max-width: 920px; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,.3); }
+  .modal-hdr { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .modal-title { font-size: 14px; font-weight: 700; }
+  .modal-close { background: none; border: none; cursor: pointer; color: var(--gray); font-size: 22px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+  .modal-close:hover { background: var(--bg); }
+  .modal-srch { padding: 10px 20px; border-bottom: 1px solid var(--border); }
+  .modal-srch input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; outline: none; }
+  .modal-body { flex: 1; overflow-y: auto; }
+  .modal-ftr { padding: 10px 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--gray); }
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 13px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-primary { background: var(--blue); color: #fff; }
   .error-state { color: var(--red); }
   footer { text-align: center; font-size: 11.5px; color: #999; padding: 1.5rem 0 2rem; }
   .loading-wrap { text-align: center; padding: 4rem 1rem; color: #888; }
@@ -105,6 +120,53 @@ const gridC = 'rgba(0,0,0,0.06)';
 function fmt(n){ return Number(n||0).toLocaleString('pt-BR'); }
 function fmtPct(n){ return Number(n||0).toLocaleString('pt-BR', {maximumFractionDigits:1}) + '%'; }
 
+/* ---------- MODAL (listas clicáveis de tickets) ---------- */
+let _modalTix = [];
+function openModal(title, tix, badges){
+  _modalTix = tix || [];
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBadges').innerHTML = (badges||[]).map(([cls,txt]) =>
+    `<span class="sec-badge badge-${cls}">${txt}</span>`).join(' ');
+  document.getElementById('modalSearch').value = '';
+  renderModalTable(_modalTix);
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function renderModalTable(tix){
+  document.getElementById('modalCount').textContent = fmt(tix.length) + (tix.length===1?' ticket exibido':' tickets exibidos');
+  const body = document.getElementById('modalBody');
+  if (!tix.length){ body.innerHTML = '<div style="text-align:center;color:#999;padding:40px">Nenhum ticket encontrado.</div>'; return; }
+  body.innerHTML = `<table>
+    <thead><tr><th>#</th><th>Código</th><th>Tipo</th><th>Status</th><th>Fornecedora</th><th>Distribuidora</th><th>Criado</th><th>Dias</th><th>SLA</th></tr></thead>
+    <tbody>${tix.slice(0,500).map((t,i) => `<tr>
+      <td>${i+1}</td><td style="font-weight:600">${t.codigo}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.tipo}">${t.tipo}</td>
+      <td>${t.status}</td><td>${t.fornecedora||'—'}</td><td>${t.distribuidora||'—'}</td>
+      <td style="white-space:nowrap">${t.criadoEm||'—'}</td>
+      <td>${t.elapsed!=null?t.elapsed.toFixed(1):'—'}</td>
+      <td style="color:${t.foraSla?'#A32D2D':'#1D9E75'}">${t.foraSla?'Fora do SLA':'No prazo'}</td>
+    </tr>`).join('')}
+    ${tix.length>500 ? `<tr><td colspan="9" style="text-align:center;color:#999;padding:10px">+${fmt(tix.length-500)} adicionais — use o CSV</td></tr>` : ''}
+    </tbody></table>`;
+}
+function wireModalHandlers(){
+  document.getElementById('modalSearch').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    renderModalTable(q ? _modalTix.filter(t => [t.codigo,t.tipo,t.status,t.fornecedora,t.distribuidora,t.cliente].some(x => (x||'').toString().toLowerCase().includes(q))) : _modalTix);
+  });
+  document.getElementById('modalCloseBtn').addEventListener('click', () => document.getElementById('modalOverlay').classList.remove('open'));
+  document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open'); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { const ov = document.getElementById('modalOverlay'); if (ov) ov.classList.remove('open'); } });
+  document.getElementById('modalExportBtn').addEventListener('click', () => {
+    const q = document.getElementById('modalSearch').value.toLowerCase();
+    const data = q ? _modalTix.filter(t => [t.codigo,t.tipo,t.status,t.fornecedora,t.distribuidora,t.cliente].some(x => (x||'').toString().toLowerCase().includes(q))) : _modalTix;
+    const header = 'Código,Tipo,Status,Fornecedora,Distribuidora,Cliente,Criado,Dias,SLA\n';
+    const rows = data.map(t => [t.codigo,t.tipo,t.status,t.fornecedora,t.distribuidora,t.cliente,t.criadoEm,t.elapsed,t.foraSla?'Fora do SLA':'No prazo']
+      .map(x => `"${x==null?'':x}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tickets-igreen.csv'; a.click();
+  });
+}
+
 let DATA = null;
 
 async function loadData(){
@@ -126,6 +188,27 @@ function boot(){
     <div class="tabs-wrap"><div class="tabs" id="tabsBar"></div></div>
     <div class="container" id="sectionsContainer"></div>
   `;
+
+  document.getElementById('root').insertAdjacentHTML('beforeend', `
+    <div id="modalOverlay">
+      <div id="modalBox">
+        <div class="modal-hdr">
+          <div>
+            <div class="modal-title" id="modalTitle"></div>
+            <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap" id="modalBadges"></div>
+          </div>
+          <button class="modal-close" id="modalCloseBtn">&times;</button>
+        </div>
+        <div class="modal-srch"><input type="text" id="modalSearch" placeholder="Buscar por código, tipo, status, distribuidora, cliente…"></div>
+        <div class="modal-body" id="modalBody"></div>
+        <div class="modal-ftr">
+          <span id="modalCount"></span>
+          <button class="btn btn-primary" id="modalExportBtn">⬇ Exportar CSV</button>
+        </div>
+      </div>
+    </div>
+  `);
+  wireModalHandlers();
   renderHero();
   buildShell();
   sections[0].render();
@@ -163,6 +246,7 @@ function buildShell(){
   sections = [];
   sections.push({ id: 'geral', label: 'Visão Geral', render: renderGeral });
   if (DATA.fornecedoras.length > 0) sections.push({ id: 'fornecedoras', label: 'Fornecedoras', render: renderFornecedoras });
+  if (DATA.distribuidoras && DATA.distribuidoras.length > 0) sections.push({ id: 'distribuidoras', label: 'Distribuidoras', render: renderDistribuidoras });
   DATA.months.forEach(m => sections.push({ id: 'm-' + m.key, label: m.label, render: () => renderMes(m) }));
   sections.push({ id: 'sla', label: 'SLA & Tempos', render: renderSla });
   sections.push({ id: 'picos', label: 'Picos & Semanas', render: renderPicos });
@@ -197,7 +281,12 @@ function renderGeral(){
     el.innerHTML = '<div class="empty-state">Ainda não há dados na base.</div>';
     return;
   }
+  const tg = DATA.temposGlobais || {};
   el.innerHTML = `
+    <div class="sec-header"><span class="sec-title">Tempos médios do período</span></div>
+    <p class="sec-desc">Médias sobre todos os tickets da base.</p>
+    <div class="ggrid" id="gaugesRow"></div>
+
     <div class="sec-header"><span class="sec-title">Volume mensal</span><span class="sec-badge badge-blue">${DATA.months[0].label} – ${DATA.months[DATA.months.length-1].label}</span></div>
     <p class="sec-desc">Tickets abertos, finalizados e com resposta da fornecedora, por mês.</p>
     <div class="chart-card"><div class="chart-wrap" style="height:280px"><canvas id="chartMensal"></canvas></div></div>
@@ -209,12 +298,31 @@ function renderGeral(){
       <tbody>${DATA.months.map(m => `<tr>
         <td>${m.label}</td><td>${fmt(m.abertos)}</td><td>${fmt(m.finalizados)}</td>
         <td style="color:${m.taxaFin>=80?'#1D9E75':m.taxaFin>=50?'#BA7517':'#A32D2D'}">${fmtPct(m.taxaFin)}</td>
-        <td>${fmt(m.respThopen)}</td><td>${fmt(m.pendSemResp)}</td>
-        <td style="color:${m.foraSla>0?'#A32D2D':'#1D9E75'}">${m.foraSla>0?fmt(m.foraSla):'✓ todos no prazo'}</td>
+        <td>${fmt(m.respThopen)}</td><td class="cc" data-mes-pend="${m.key}">${fmt(m.pendSemResp)}</td>
+        <td class="cc" style="color:${m.foraSla>0?'#A32D2D':'#1D9E75'}" data-mes-fora="${m.key}">${m.foraSla>0?fmt(m.foraSla):'✓ todos no prazo'}</td>
         <td>${m.tmedRelDias!==null ? m.tmedRelDias.toFixed(1)+'d' : '—'}</td>
         <td>${m.tmedFornDias!==null ? m.tmedFornDias.toFixed(1)+'d' : '—'}</td>
         <td>${m.tmedRespDias!==null ? m.tmedRespDias.toFixed(1)+'d' : '—'}</td>
       </tr>`).join('')}</tbody>
+    </table></div>
+
+    <div class="sec-header"><span class="sec-title">Tendência de tipos de ticket</span><span class="sec-badge badge-coral">clique para ver os tickets</span></div>
+    <p class="sec-desc">Comparação do último mês com o anterior. Clique numa linha para ver a lista completa daquele tipo.</p>
+    <div class="tbl-wrap" style="margin-bottom:1.6rem"><table>
+      <thead><tr><th>Tipo</th><th>Total período</th><th>Tendência</th><th>Últimos meses</th></tr></thead>
+      <tbody>${(DATA.tipoTrends||[]).map(t => {
+        const max = Math.max(...t.serie, 1);
+        const spark = t.serie.map(v => `<span style="display:inline-block;width:7px;margin-right:1px;height:${Math.max(3,Math.round(v/max*22))}px;background:${BLUE};vertical-align:bottom;border-radius:1px" title="${v}"></span>`).join('');
+        const trendHtml = t.tendencia==='alta'
+          ? `<span style="color:${CORAL};font-weight:700">▲ ${t.deltaPct!==null?fmtPct(t.deltaPct):''}</span>`
+          : t.tendencia==='baixa'
+            ? `<span style="color:${GREEN};font-weight:700">▼ ${t.deltaPct!==null?fmtPct(Math.abs(t.deltaPct)):''}</span>`
+            : `<span style="color:${GRAY}">— estável</span>`;
+        return `<tr class="cc" data-tipo-trend="${t.tipo.replace(/"/g,'&quot;')}">
+          <td>${t.tipo}</td><td>${fmt(t.total)}</td><td>${trendHtml}</td>
+          <td>${spark}</td>
+        </tr>`;
+      }).join('')}</tbody>
     </table></div>
 
     <div class="sec-header"><span class="sec-title">Top 15 tipos de ticket</span></div>
@@ -223,6 +331,11 @@ function renderGeral(){
       <tbody>${DATA.topTipos.map(t => `<tr><td>${t.tipo}</td><td>${fmt(t.qtd)}</td><td>${fmtPct(t.qtd/DATA.totalTickets*100)}</td></tr>`).join('')}</tbody>
     </table></div>
   `;
+  document.getElementById('gaugesRow').innerHTML = [
+    ['T.méd. Relacionamento', tg.rel],
+    ['T.méd. Fornecedora', tg.forn],
+    ['T.méd. 1ª Resposta', tg.resp]
+  ].map(([label, val]) => gaugeSvg(val, label)).join('');
   new Chart(document.getElementById('chartMensal'), {
     type: 'bar',
     data: {
@@ -237,42 +350,96 @@ function renderGeral(){
       plugins: { legend: { position: 'top' } },
       scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
   });
+  el.querySelectorAll('[data-mes-pend]').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const key = cell.dataset.mesPend;
+      const m = DATA.months.find(x => x.key === key);
+      openModal('Pendentes s/ resposta — ' + m.label, DATA.allTickets.filter(t => t.mesChave === key && t.semResposta),
+        [['coral', fmt(m.pendSemResp) + ' pendentes']]);
+    });
+  });
+  el.querySelectorAll('[data-mes-fora]').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const key = cell.dataset.mesFora;
+      const m = DATA.months.find(x => x.key === key);
+      openModal('Fora do SLA — ' + m.label, DATA.allTickets.filter(t => t.mesChave === key && t.foraSla),
+        [['coral', fmt(m.foraSla) + ' fora do SLA']]);
+    });
+  });
+  el.querySelectorAll('[data-tipo-trend]').forEach(row => {
+    row.addEventListener('click', () => {
+      const tipo = row.dataset.tipoTrend;
+      const tix = DATA.allTickets.filter(t => t.tipo === tipo);
+      openModal('Tipo: ' + tipo, tix, [['blue', fmt(tix.length) + ' tickets no período']]);
+    });
+  });
 }
 
-/* ---------- FORNECEDORAS ---------- */
-let fornecedoraAtiva = null;
-function renderFornecedoras(){
-  const el = document.getElementById('tab-fornecedoras');
-  if (!fornecedoraAtiva) fornecedoraAtiva = DATA.fornecedorasDetail[0].nome;
+/* ---------- GAUGE (semicírculo SVG) ---------- */
+function gaugeSvg(val, label){
+  if (val === null || val === undefined) {
+    return `<div class="chart-card" style="text-align:center;padding:.9rem"><div class="kpi-label">${label}</div><div style="padding:1.2rem 0;color:${GRAY}">sem dados</div></div>`;
+  }
+  const maxScale = 30;
+  const p = Math.min(val / maxScale, 1);
+  const color = val <= 7 ? GREEN : val <= 15 ? AMBER : RED;
+  const angle = Math.PI - p * Math.PI;
+  const ex = (70 + 60 * Math.cos(angle)).toFixed(1);
+  const ey = (70 - 60 * Math.sin(angle)).toFixed(1);
+  const largeArc = p > 0.5 ? 1 : 0;
+  return `<div class="chart-card" style="text-align:center;padding:.9rem">
+    <div class="kpi-label">${label}</div>
+    <svg width="140" height="80" viewBox="0 0 140 80">
+      <path d="M10,70 A60,60 0 0,1 130,70" fill="none" stroke="${LGRAY}" stroke-width="12" stroke-linecap="round"/>
+      <path d="M10,70 A60,60 0 ${largeArc},1 ${ex},${ey}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"/>
+    </svg>
+    <div style="font-size:1.3rem;font-weight:700;color:${color}">${val.toFixed(1)}d</div>
+  </div>`;
+}
+
+/* ---------- FORNECEDORAS / DISTRIBUIDORAS (genérico) ---------- */
+const activeGroupItem = {};
+function renderFornecedoras(){ renderGroupSection_('fornecedorasDetail', 'fornecedoras', 'Fornecedoras'); }
+function renderDistribuidoras(){ renderGroupSection_('distribuidorasDetail', 'distribuidoras', 'Distribuidoras'); }
+
+function renderGroupSection_(dataKey, tabId, titulo){
+  const el = document.getElementById('tab-' + tabId);
+  const list = DATA[dataKey];
+  if (!list || !list.length) { el.innerHTML = '<div class="empty-state">Nenhum dado disponível.</div>'; return; }
+  if (!activeGroupItem[tabId]) activeGroupItem[tabId] = list[0].nome;
   el.innerHTML = `
-    <div class="sec-header"><span class="sec-title">Fornecedoras</span><span class="sec-badge badge-blue">${DATA.fornecedorasDetail.length} fornecedora(s)</span></div>
+    <div class="sec-header"><span class="sec-title">${titulo}</span><span class="sec-badge badge-blue">${list.length} item(ns)</span></div>
     <div style="display:flex; gap:1.2rem; flex-wrap:wrap">
       <div style="min-width:200px; flex:0 0 200px">
-        <div class="tbl-wrap" style="overflow:visible">
-          ${DATA.fornecedorasDetail.map(f => `
-            <div class="fornec-item" data-nome="${f.nome}" style="padding:.7rem 1rem; cursor:pointer; border-bottom:1px solid var(--border); ${f.nome===fornecedoraAtiva?'background:var(--lb); border-left:3px solid var(--blue)':''}">
+        <div class="tbl-wrap" style="overflow:visible; max-height:520px; overflow-y:auto">
+          ${list.map(f => `
+            <div class="group-item" data-nome="${f.nome.replace(/"/g,'&quot;')}" style="padding:.7rem 1rem; cursor:pointer; border-bottom:1px solid var(--border); ${f.nome===activeGroupItem[tabId]?'background:var(--lb); border-left:3px solid var(--blue)':''}">
               <div style="font-weight:600; font-size:13px">${f.nome}</div>
               <div style="font-size:11px; color:#888">${fmt(f.total)} tickets · ${fmtPct(f.taxaFin)} fin.</div>
             </div>`).join('')}
         </div>
       </div>
-      <div style="flex:1; min-width:280px" id="fornecDetail"></div>
+      <div style="flex:1; min-width:280px" id="groupDetail-${tabId}"></div>
     </div>
   `;
-  el.querySelectorAll('.fornec-item').forEach(item => {
-    item.addEventListener('click', () => { fornecedoraAtiva = item.dataset.nome; renderFornecedoras(); });
+  el.querySelectorAll('.group-item').forEach(item => {
+    item.addEventListener('click', () => { activeGroupItem[tabId] = item.dataset.nome; renderGroupSection_(dataKey, tabId, titulo); });
   });
-  renderFornecedoraDetail_(fornecedoraAtiva);
+  renderGroupDetail_(dataKey, tabId, activeGroupItem[tabId]);
 }
 
-function renderFornecedoraDetail_(nome){
-  const f = DATA.fornecedorasDetail.find(x => x.nome === nome);
-  const el = document.getElementById('fornecDetail');
+function renderGroupDetail_(dataKey, tabId, nome){
+  const list = DATA[dataKey];
+  const f = list.find(x => x.nome === nome);
+  const el = document.getElementById('groupDetail-' + tabId);
   if (!f || !el) return;
   const sla = f.slaResp;
+  const safeId = tabId + '-' + nome.replace(/\W/g,'');
   const regraTxt = f.slaRuleMode === 'response'
     ? `Sem resposta + tempo em aberto &gt; ${f.slaRuleLimite} dias úteis`
-    : `Tempo total (criação → agora/finalização) &gt; ${f.slaRuleLimite} dias corridos`;
+    : f.slaRuleMode === 'misto'
+      ? 'Mistura de fornecedoras com regras diferentes — veja o detalhe por ticket abaixo'
+      : `Tempo total (criação → agora/finalização) &gt; ${f.slaRuleLimite} dias corridos`;
 
   el.innerHTML = `
     <div class="kpi-grid">
@@ -282,12 +449,12 @@ function renderFornecedoraDetail_(nome){
       ${f.semRespostaAplicavel
         ? `<div class="kpi-card"><div class="kpi-label">Sem resposta</div><div class="kpi-value">${fmt(f.semRespostaCount)}</div></div>`
         : `<div class="kpi-card"><div class="kpi-label">Sem resposta</div><div class="kpi-value">—</div><div class="kpi-sub">não rastreado (e-mail/Teams)</div></div>`}
-      <div class="kpi-card" style="border-left:4px solid ${f.foraSlaCount>0?RED:GREEN}"><div class="kpi-label">Fora do SLA</div><div class="kpi-value">${fmt(f.foraSlaCount)}</div></div>
+      <div class="kpi-card cc" id="kpiForaSla-${safeId}" style="border-left:4px solid ${f.foraSlaCount>0?RED:GREEN}"><div class="kpi-label">Fora do SLA</div><div class="kpi-value">${fmt(f.foraSlaCount)}</div></div>
     </div>
-    <div class="alert alert-amber" style="font-size:12px">📏 <div><strong>Regra de SLA desta fornecedora:</strong> ${regraTxt}</div></div>
+    <div class="alert alert-amber" style="font-size:12px">📏 <div><strong>Regra de SLA:</strong> ${regraTxt}</div></div>
     ${f.semRespostaAplicavel ? `
     <div class="chart-card"><h3>SLA — 1ª resposta</h3>
-      <div class="chart-wrap" style="height:220px"><canvas id="chartSlaResp-${nome.replace(/\\W/g,'')}"></canvas></div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chartSlaResp-${safeId}"></canvas></div>
     </div>` : ''}
     <div class="sec-header"><span class="sec-title">Top tipos de ticket</span></div>
     <div class="tbl-wrap" style="margin-bottom:1.4rem"><table>
@@ -296,16 +463,16 @@ function renderFornecedoraDetail_(nome){
     </table></div>
     <div class="sec-header"><span class="sec-title">Tickets pendentes (top 50 por tempo em aberto)</span></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Código</th><th>Tipo</th><th>Status</th><th>Distribuidora</th><th>Criado</th><th>Dias</th><th>SLA</th></tr></thead>
+      <thead><tr><th>Código</th><th>Tipo</th><th>Status</th><th>Fornecedora</th><th>Distribuidora</th><th>Criado</th><th>Dias</th><th>SLA</th></tr></thead>
       <tbody>${f.pendentes.length ? f.pendentes.map(p => `<tr>
-        <td>${p.codigo}</td><td>${p.tipo}</td><td>${p.status}</td><td>${p.distribuidora||'—'}</td>
+        <td>${p.codigo}</td><td>${p.tipo}</td><td>${p.status}</td><td>${p.fornecedora||'—'}</td><td>${p.distribuidora||'—'}</td>
         <td>${p.criadoEm}</td><td>${p.elapsed!==null?p.elapsed.toFixed(1):'—'}</td>
         <td style="color:${p.foraSla?'#A32D2D':'#1D9E75'}">${p.foraSla?'Fora do SLA':'No prazo'}</td>
-      </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:#999">Nenhum ticket em aberto</td></tr>'}</tbody>
+      </tr>`).join('') : '<tr><td colspan="8" style="text-align:center;color:#999">Nenhum ticket em aberto</td></tr>'}</tbody>
     </table></div>
   `;
   if (f.semRespostaAplicavel) {
-    new Chart(document.getElementById('chartSlaResp-' + nome.replace(/\W/g,'')), {
+    new Chart(document.getElementById('chartSlaResp-' + safeId), {
       type: 'bar',
       data: {
         labels: ['≤24h','1-3 dias','3-7 dias','>7 dias','Sem resposta'],
@@ -314,6 +481,14 @@ function renderFornecedoraDetail_(nome){
       },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
         scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
+    });
+  }
+  const kpiForaSlaEl = document.getElementById('kpiForaSla-' + safeId);
+  if (kpiForaSlaEl) {
+    kpiForaSlaEl.addEventListener('click', () => {
+      const filterField = tabId === 'distribuidoras' ? 'distribuidora' : 'fornecedora';
+      openModal('Fora do SLA — ' + nome, DATA.allTickets.filter(t => t[filterField] === nome && t.foraSla),
+        [['coral', fmt(f.foraSlaCount) + ' fora do SLA']]);
     });
   }
 }
@@ -328,12 +503,16 @@ function renderMes(m){
       <div class="kpi-card" style="border-left:4px solid ${BLUE}"><div class="kpi-label">Abertos</div><div class="kpi-value">${fmt(m.abertos)}</div></div>
       <div class="kpi-card" style="border-left:4px solid ${TEAL}"><div class="kpi-label">Finalizados</div><div class="kpi-value">${fmt(m.finalizados)}</div><div class="kpi-sub">${fmtPct(m.taxaFin)}</div></div>
       <div class="kpi-card" style="border-left:4px solid ${CORAL}"><div class="kpi-label">Resp. fornecedora (coorte)</div><div class="kpi-value">${fmt(m.respThopen)}</div></div>
-      <div class="kpi-card" style="border-left:4px solid ${m.foraSla>0?RED:GREEN}"><div class="kpi-label">Fora do SLA (&gt;10 du)</div><div class="kpi-value">${fmt(m.foraSla)}</div><div class="kpi-sub">${fmt(m.pendSemResp)} pendentes s/ resp.</div></div>
+      <div class="kpi-card cc" id="kpiMesForaSla-${m.key}" style="border-left:4px solid ${m.foraSla>0?RED:GREEN}"><div class="kpi-label">Fora do SLA (&gt;10 du)</div><div class="kpi-value">${fmt(m.foraSla)}</div><div class="kpi-sub">${fmt(m.pendSemResp)} pendentes s/ resp.</div></div>
     </div>
     <div class="chart-card"><h3>Tickets abertos por dia</h3>
       <div class="chart-wrap" style="height:260px"><canvas id="chartDia-${m.key}"></canvas></div>
     </div>
   `;
+  document.getElementById('kpiMesForaSla-' + m.key).addEventListener('click', () => {
+    openModal('Fora do SLA — ' + m.label, DATA.allTickets.filter(t => t.mesChave === m.key && t.foraSla),
+      [['coral', fmt(m.foraSla) + ' fora do SLA']]);
+  });
   new Chart(document.getElementById('chartDia-' + m.key), {
     type: 'bar',
     data: { labels: dias.map(d => d.date), datasets: [{ data: dias.map(d => d.value),
@@ -417,6 +596,8 @@ function renderPicos(){
 }
 
 /* ---------- REABERTURAS ---------- */
+let _reabMinQtd = 2;
+let _reabSearch = '';
 function renderReab(){
   const el = document.getElementById('tab-reab');
   const r = DATA.reaberturas;
@@ -433,7 +614,48 @@ function renderReab(){
       <div class="kpi-card" style="border-left:4px solid ${RED}"><div class="kpi-label">Clientes com 5+ tickets</div><div class="kpi-value">${fmt(r.clientes5mais)}</div><div class="kpi-sub">alta recorrência</div></div>
       <div class="kpi-card" style="border-left:4px solid ${RED}"><div class="kpi-label">Clientes com 8+ tickets</div><div class="kpi-value">${fmt(r.clientes8mais)}</div><div class="kpi-sub">casos críticos</div></div>
     </div>
+
+    <div class="sec-header"><span class="sec-title">Pares cliente + tipo repetidos</span></div>
+    <p class="sec-desc">Clique em "ver" para abrir a lista de tickets daquele cliente com aquele tipo.</p>
+    <div style="display:flex; gap:10px; margin-bottom:1rem; flex-wrap:wrap; align-items:center">
+      <input type="text" id="reabSearch" placeholder="Buscar por cliente ou tipo…" style="flex:1; min-width:200px; padding:.5rem .7rem; border:1px solid var(--border); border-radius:8px; font-size:13px">
+      <select id="reabMinQtd" style="padding:.5rem .7rem; border:1px solid var(--border); border-radius:8px; font-size:13px">
+        <option value="2">2+ tickets</option>
+        <option value="3">3+ tickets</option>
+        <option value="5">5+ tickets</option>
+        <option value="8">8+ tickets</option>
+      </select>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Cliente</th><th>Tipo</th><th>Qtd</th><th>Abertos</th><th>Finalizados</th><th></th></tr></thead>
+      <tbody id="reabParesBody"></tbody>
+    </table></div>
   `;
+  document.getElementById('reabSearch').addEventListener('input', e => { _reabSearch = e.target.value.toLowerCase(); renderReabParesTable_(); });
+  document.getElementById('reabMinQtd').addEventListener('change', e => { _reabMinQtd = parseInt(e.target.value); renderReabParesTable_(); });
+  renderReabParesTable_();
+}
+
+function renderReabParesTable_(){
+  const body = document.getElementById('reabParesBody');
+  if (!body) return;
+  const pares = (DATA.reaberturasPares || [])
+    .filter(p => p.qtd >= _reabMinQtd)
+    .filter(p => !_reabSearch || p.cliente.toLowerCase().includes(_reabSearch) || p.tipo.toLowerCase().includes(_reabSearch))
+    .slice(0, 300);
+  if (!pares.length){ body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:1rem">Nenhum par encontrado.</td></tr>'; return; }
+  body.innerHTML = pares.map((p,i) => `<tr>
+    <td>${p.cliente}</td><td>${p.tipo}</td><td><strong>${fmt(p.qtd)}</strong></td>
+    <td>${fmt(p.abertos)}</td><td>${fmt(p.finalizados)}</td>
+    <td><button class="btn btn-primary" style="padding:3px 10px;font-size:11px" data-reab-i="${i}">🔍 ver</button></td>
+  </tr>`).join('');
+  body.querySelectorAll('[data-reab-i]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = pares[parseInt(btn.dataset.reabI)];
+      const tix = DATA.allTickets.filter(t => t.cliente === p.cliente && t.tipo === p.tipo);
+      openModal('Cliente ' + p.cliente + ' — ' + p.tipo, tix, [['coral', fmt(p.qtd) + ' tickets']]);
+    });
+  });
 }
 
 loadData();
