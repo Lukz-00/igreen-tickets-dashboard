@@ -43,6 +43,7 @@
   .sec-desc { font-size: 13px; color: #666; margin: .3rem 0 1.2rem; }
   .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.6rem; }
   .ggrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.6rem; }
+  .cgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 1.6rem; }
   .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
   .kpi-label { font-size: 11.5px; color: #777; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
   .kpi-value { font-size: 1.6rem; font-weight: 700; }
@@ -306,24 +307,29 @@ function renderGeral(){
       </tr>`).join('')}</tbody>
     </table></div>
 
-    <div class="sec-header"><span class="sec-title">Tendência de tipos de ticket</span><span class="sec-badge badge-coral">clique para ver os tickets</span></div>
-    <p class="sec-desc">Comparação do último mês com o anterior. Clique numa linha para ver a lista completa daquele tipo.</p>
-    <div class="tbl-wrap" style="margin-bottom:1.6rem"><table>
-      <thead><tr><th>Tipo</th><th>Total período</th><th>Tendência</th><th>Últimos meses</th></tr></thead>
-      <tbody>${(DATA.tipoTrends||[]).map(t => {
-        const max = Math.max(...t.serie, 1);
-        const spark = t.serie.map(v => `<span style="display:inline-block;width:7px;margin-right:1px;height:${Math.max(3,Math.round(v/max*22))}px;background:${BLUE};vertical-align:bottom;border-radius:1px" title="${v}"></span>`).join('');
-        const trendHtml = t.tendencia==='alta'
-          ? `<span style="color:${CORAL};font-weight:700">▲ ${t.deltaPct!==null?fmtPct(t.deltaPct):''}</span>`
-          : t.tendencia==='baixa'
-            ? `<span style="color:${GREEN};font-weight:700">▼ ${t.deltaPct!==null?fmtPct(Math.abs(t.deltaPct)):''}</span>`
-            : `<span style="color:${GRAY}">— estável</span>`;
-        return `<tr class="cc" data-tipo-trend="${t.tipo.replace(/"/g,'&quot;')}">
-          <td>${t.tipo}</td><td>${fmt(t.total)}</td><td>${trendHtml}</td>
-          <td>${spark}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table></div>
+    <div class="sec-header"><span class="sec-title">Tipos mais abertos — tendência e comparativo mensal</span></div>
+    <p class="sec-desc">${DATA.tipoQuinzenal ? `Últimas 2 semanas: <strong>${DATA.tipoQuinzenal.rangeAtual}</strong> · 2 semanas anteriores: <strong>${DATA.tipoQuinzenal.rangeAnterior}</strong> · 🔴 = volume aumentou ≥50% nas últimas 2 semanas (gargalo em crescimento)` : ''}</p>
+    <div class="cgrid">
+      <div class="chart-card"><h3>Top tipos — últimas 2 semanas</h3><p>Comparado às 2 semanas anteriores. Clique numa barra para ver os tickets.</p>
+        <div class="chart-wrap" style="height:260px"><canvas id="chartTipo2w"></canvas></div>
+      </div>
+      <div class="chart-card"><h3>Evolução mensal — top 6 tipos</h3><p>Tendência mês a mês.</p>
+        <div class="chart-wrap" style="height:260px"><canvas id="chartTipoEvol"></canvas></div>
+      </div>
+    </div>
+
+    <div class="sec-header"><span class="sec-title">Visão geral do período</span></div>
+    <div class="cgrid">
+      <div class="chart-card"><h3>Volume de Tickets por Mês</h3>
+        <div class="chart-wrap" style="height:220px"><canvas id="chartOvVol"></canvas></div>
+      </div>
+      <div class="chart-card"><h3>Taxa de Finalização por Mês (%)</h3>
+        <div class="chart-wrap" style="height:220px"><canvas id="chartOvFin"></canvas></div>
+      </div>
+      <div class="chart-card"><h3>Top Tipos de Ticket — período completo</h3>
+        <div class="chart-wrap" style="height:220px"><canvas id="chartOvTipo"></canvas></div>
+      </div>
+    </div>
 
     <div class="sec-header"><span class="sec-title">Top 15 tipos de ticket</span></div>
     <div class="tbl-wrap"><table>
@@ -350,6 +356,83 @@ function renderGeral(){
       plugins: { legend: { position: 'top' } },
       scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
   });
+
+  /* --- Tipos mais abertos: comparativo últimas 2 semanas --- */
+  const q = DATA.tipoQuinzenal && DATA.tipoQuinzenal.itens ? DATA.tipoQuinzenal.itens : [];
+  new Chart(document.getElementById('chartTipo2w'), {
+    type: 'bar',
+    data: {
+      labels: q.map(t => t.tipo.length > 22 ? t.tipo.slice(0,22)+'…' : t.tipo),
+      datasets: [
+        { label: 'Últ. 2 sem.', data: q.map(t => t.atual), backgroundColor: q.map(t => t.gargalo ? RED : BLUE), borderRadius: 4 },
+        { label: '2 sem. ant.', data: q.map(t => t.anterior), backgroundColor: LGRAY, borderRadius: 4 }
+      ]
+    },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } },
+      scales: { x: { grid: { color: gridC } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } },
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const tipo = q[els[0].index].tipo;
+        openModal('Tipo: ' + tipo, DATA.allTickets.filter(t => t.tipo === tipo), [['blue', 'tickets no período completo']]);
+      }
+    }
+  });
+
+  /* --- Evolução mensal: top 6 tipos --- */
+  const top6 = (DATA.tipoTrends || []).slice(0, 6);
+  const evolColors = [BLUE, CORAL, AMBER, GREEN, '#7C3AED', '#0891B2'];
+  new Chart(document.getElementById('chartTipoEvol'), {
+    type: 'line',
+    data: {
+      labels: DATA.months.map(m => m.label),
+      datasets: top6.map((t,i) => ({
+        label: t.tipo.length > 18 ? t.tipo.slice(0,18)+'…' : t.tipo,
+        data: t.serie, borderColor: evolColors[i % evolColors.length],
+        backgroundColor: evolColors[i % evolColors.length], tension: .35, pointRadius: 4, fill: false
+      }))
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 } } } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } },
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const tipo = top6[els[0].datasetIndex].tipo;
+        openModal('Tipo: ' + tipo, DATA.allTickets.filter(t => t.tipo === tipo), [['blue', 'tickets no período completo']]);
+      }
+    }
+  });
+
+  /* --- Visão geral: volume / taxa fin. / top tipos --- */
+  new Chart(document.getElementById('chartOvVol'), {
+    type: 'bar',
+    data: { labels: DATA.months.map(m => m.label), datasets: [{ data: DATA.months.map(m => m.abertos),
+      backgroundColor: DATA.months.map((m,i) => i === DATA.months.length-1 ? TEAL : BLUE), borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
+  });
+  new Chart(document.getElementById('chartOvFin'), {
+    type: 'line',
+    data: { labels: DATA.months.map(m => m.label), datasets: [{ data: DATA.months.map(m => m.taxaFin),
+      borderColor: GREEN, backgroundColor: 'rgba(29,158,117,.12)', fill: true, tension: .35, pointRadius: 5, pointBackgroundColor: GREEN }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { min: 0, max: 100, grid: { color: gridC }, ticks: { callback: v => v + '%' } } } }
+  });
+  const top8Geral = DATA.topTipos.slice(0, 8);
+  new Chart(document.getElementById('chartOvTipo'), {
+    type: 'bar',
+    data: { labels: top8Geral.map(t => t.tipo.length > 20 ? t.tipo.slice(0,20)+'…' : t.tipo),
+      datasets: [{ data: top8Geral.map(t => t.qtd), backgroundColor: BLUE, borderRadius: 4 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { grid: { color: gridC } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } },
+      onClick: (evt, els) => {
+        if (!els.length) return;
+        const tipo = top8Geral[els[0].index].tipo;
+        openModal('Tipo: ' + tipo, DATA.allTickets.filter(t => t.tipo === tipo), [['blue', 'tickets no período completo']]);
+      }
+    }
+  });
+
   el.querySelectorAll('[data-mes-pend]').forEach(cell => {
     cell.addEventListener('click', () => {
       const key = cell.dataset.mesPend;
@@ -364,13 +447,6 @@ function renderGeral(){
       const m = DATA.months.find(x => x.key === key);
       openModal('Fora do SLA — ' + m.label, DATA.allTickets.filter(t => t.mesChave === key && t.foraSla),
         [['coral', fmt(m.foraSla) + ' fora do SLA']]);
-    });
-  });
-  el.querySelectorAll('[data-tipo-trend]').forEach(row => {
-    row.addEventListener('click', () => {
-      const tipo = row.dataset.tipoTrend;
-      const tix = DATA.allTickets.filter(t => t.tipo === tipo);
-      openModal('Tipo: ' + tipo, tix, [['blue', fmt(tix.length) + ' tickets no período']]);
     });
   });
 }
