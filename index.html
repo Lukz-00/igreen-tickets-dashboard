@@ -270,32 +270,52 @@ function renderFornecedoraDetail_(nome){
   const el = document.getElementById('fornecDetail');
   if (!f || !el) return;
   const sla = f.slaResp;
+  const regraTxt = f.slaRuleMode === 'response'
+    ? `Sem resposta + tempo em aberto &gt; ${f.slaRuleLimite} dias úteis`
+    : `Tempo total (criação → agora/finalização) &gt; ${f.slaRuleLimite} dias corridos`;
+
   el.innerHTML = `
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Total tickets</div><div class="kpi-value">${fmt(f.total)}</div></div>
       <div class="kpi-card" style="border-left:4px solid ${TEAL}"><div class="kpi-label">Finalizados</div><div class="kpi-value">${fmt(f.finalizados)}</div><div class="kpi-sub">${fmtPct(f.taxaFin)}</div></div>
       <div class="kpi-card" style="border-left:4px solid ${BLUE}"><div class="kpi-label">Em aberto</div><div class="kpi-value">${fmt(f.aberto)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Sem resposta</div><div class="kpi-value">${fmt(f.semResposta)}</div></div>
+      ${f.semRespostaAplicavel
+        ? `<div class="kpi-card"><div class="kpi-label">Sem resposta</div><div class="kpi-value">${fmt(f.semRespostaCount)}</div></div>`
+        : `<div class="kpi-card"><div class="kpi-label">Sem resposta</div><div class="kpi-value">—</div><div class="kpi-sub">não rastreado (e-mail/Teams)</div></div>`}
+      <div class="kpi-card" style="border-left:4px solid ${f.foraSlaCount>0?RED:GREEN}"><div class="kpi-label">Fora do SLA</div><div class="kpi-value">${fmt(f.foraSlaCount)}</div></div>
     </div>
+    <div class="alert alert-amber" style="font-size:12px">📏 <div><strong>Regra de SLA desta fornecedora:</strong> ${regraTxt}</div></div>
+    ${f.semRespostaAplicavel ? `
     <div class="chart-card"><h3>SLA — 1ª resposta</h3>
       <div class="chart-wrap" style="height:220px"><canvas id="chartSlaResp-${nome.replace(/\\W/g,'')}"></canvas></div>
-    </div>
+    </div>` : ''}
     <div class="sec-header"><span class="sec-title">Top tipos de ticket</span></div>
-    <div class="tbl-wrap"><table>
+    <div class="tbl-wrap" style="margin-bottom:1.4rem"><table>
       <thead><tr><th>Tipo</th><th>Qtd</th></tr></thead>
       <tbody>${f.topTipos.map(t => `<tr><td>${t.tipo}</td><td>${fmt(t.qtd)}</td></tr>`).join('')}</tbody>
     </table></div>
+    <div class="sec-header"><span class="sec-title">Tickets pendentes (top 50 por tempo em aberto)</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Código</th><th>Tipo</th><th>Status</th><th>Distribuidora</th><th>Criado</th><th>Dias</th><th>SLA</th></tr></thead>
+      <tbody>${f.pendentes.length ? f.pendentes.map(p => `<tr>
+        <td>${p.codigo}</td><td>${p.tipo}</td><td>${p.status}</td><td>${p.distribuidora||'—'}</td>
+        <td>${p.criadoEm}</td><td>${p.elapsed!==null?p.elapsed.toFixed(1):'—'}</td>
+        <td style="color:${p.foraSla?'#A32D2D':'#1D9E75'}">${p.foraSla?'Fora do SLA':'No prazo'}</td>
+      </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:#999">Nenhum ticket em aberto</td></tr>'}</tbody>
+    </table></div>
   `;
-  new Chart(document.getElementById('chartSlaResp-' + nome.replace(/\W/g,'')), {
-    type: 'bar',
-    data: {
-      labels: ['≤24h','1-3 dias','3-7 dias','>7 dias','Sem resposta'],
-      datasets: [{ data: [sla.h24, sla.d13, sla.d37, sla.d7p, sla.semResposta],
-        backgroundColor: [GREEN, BLUE, AMBER, CORAL, LGRAY], borderRadius: 4 }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
-  });
+  if (f.semRespostaAplicavel) {
+    new Chart(document.getElementById('chartSlaResp-' + nome.replace(/\W/g,'')), {
+      type: 'bar',
+      data: {
+        labels: ['≤24h','1-3 dias','3-7 dias','>7 dias','Sem resposta'],
+        datasets: [{ data: [sla.h24, sla.d13, sla.d37, sla.d7p, sla.semResposta],
+          backgroundColor: [GREEN, BLUE, AMBER, CORAL, LGRAY], borderRadius: 4 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { x: { grid: { display: false } }, y: { grid: { color: gridC } } } }
+    });
+  }
 }
 
 /* ---------- POR MÊS ---------- */
