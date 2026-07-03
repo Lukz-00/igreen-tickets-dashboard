@@ -355,6 +355,7 @@ const rendered = {};
 
 function buildShell(){
   sections = [];
+  sections.push({ id: 'diario', label: '📅 Relatório Diário', render: renderRelatorioDiario });
   sections.push({ id: 'geral', label: 'Visão Geral', render: renderGeral });
   if (DATA.fornecedoras.length > 0) sections.push({ id: 'fornecedoras', label: 'Fornecedoras', render: renderFornecedoras });
   if (DATA.distribuidoras && DATA.distribuidoras.length > 0) sections.push({ id: 'distribuidoras', label: 'Distribuidoras', render: renderDistribuidoras });
@@ -946,6 +947,458 @@ function renderReabParesTable_(){
       openModal('Cliente ' + p.cliente + ' — ' + p.tipo, tix, [['coral', fmt(p.qtd) + ' tickets']]);
     });
   });
+}
+
+/* ---------- RELATÓRIO DIÁRIO ---------- */
+// Todo o cálculo abaixo é feito no cliente a partir de DATA.allTickets
+// (criadoIso / finalizadoIso / statusFornecedora) — não depende de nenhum
+// campo novo no cache do Apps Script além do que já vem em buildAggregates_.
+// Lazy: em index.html (dashboard estático), DATA só existe depois do fetch,
+// então não dá pra montar o Set no topo do script (rodaria antes de DATA existir).
+let RD_HOLIDAYS = null;
+function rdHolidaySet_(){
+  if (!RD_HOLIDAYS) RD_HOLIDAYS = new Set(DATA.holidays || []);
+  return RD_HOLIDAYS;
+}
+const RD_NOTES_KEY = 'igreenRdNotes_v1';
+const RD_MONTH_LABELS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function rdParseIso_(iso){ const [y,m,d] = iso.split('-').map(Number); return new Date(y, m-1, d); }
+function rdFmtIso_(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function rdIsBizDay_(d){
+  const dow = d.getDay();
+  if (dow===0||dow===6) return false;
+  return !rdHolidaySet_().has(rdFmtIso_(d));
+}
+// Espelha businessDaysBetween_ do Aggregate.js: exclusivo no início, inclusivo no fim.
+function rdBizDaysBetween_(startIso, endIso){
+  if (!startIso || !endIso) return 0;
+  const start = rdParseIso_(startIso), end = rdParseIso_(endIso);
+  if (end <= start) return 0;
+  let count = 0;
+  const d = new Date(start); d.setDate(d.getDate()+1);
+  while (d <= end) { if (rdIsBizDay_(d)) count++; d.setDate(d.getDate()+1); }
+  return count;
+}
+function rdPrevBizDay_(iso){
+  const d = rdParseIso_(iso);
+  do { d.setDate(d.getDate()-1); } while (!rdIsBizDay_(d));
+  return rdFmtIso_(d);
+}
+function rdPrevMonthPrefix_(iso){
+  const d = rdParseIso_(iso);
+  d.setDate(1); d.setMonth(d.getMonth()-1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function rdMonthLabel_(prefix){
+  const [y,m] = prefix.split('-');
+  return RD_MONTH_LABELS[parseInt(m,10)-1] + '/' + y;
+}
+function rdRound1_(n){ return Math.round(n*10)/10; }
+function rdRound2_(n){ return Math.round(n*100)/100; }
+function rdDu_(n){ return n==null ? '—' : n.toFixed(2).replace('.', ','); }
+function rdSlaEmoji_(tmr){
+  if (tmr==null) return '⚪';
+  if (tmr<=6) return '🟢';
+  if (tmr<=10) return '🟡';
+  if (tmr<=15) return '🟠';
+  return '🔴';
+}
+
+function rdLatestDateIso_(){
+  let max = null;
+  DATA.allTickets.forEach(t=>{
+    if (t.criadoIso && (!max || t.criadoIso>max)) max = t.criadoIso;
+    if (t.finalizadoIso && (!max || t.finalizadoIso>max)) max = t.finalizadoIso;
+  });
+  return max || rdFmtIso_(new Date());
+}
+
+// TMR = média de dias úteis (Criado → Finalizado); SLA% = % finalizados em ≤3 d.u.
+function rdSlaStats_(tix){
+  if (!tix.length) return { count: 0, tmr: null, pctNoPrazo: null };
+  let soma = 0, noPrazo = 0;
+  tix.forEach(t => {
+    const du = rdBizDaysBetween_(t.criadoIso, t.finalizadoIso);
+    soma += du;
+    if (du <= 3) noPrazo++;
+  });
+  return { count: tix.length, tmr: rdRound2_(soma/tix.length), pctNoPrazo: rdRound1_(noPrazo/tix.length*100) };
+}
+
+function rdSnapshot_(dateIso){
+  const abertos = DATA.allTickets.filter(t => t.criadoIso === dateIso);
+  const finalizados = DATA.allTickets.filter(t => t.finalizadoIso === dateIso);
+  const backlogRaw = DATA.allTickets.filter(t => t.criadoIso <= dateIso && (!t.finalizadoIso || t.finalizadoIso > dateIso));
+
+  const backlog = backlogRaw.map(t => {
+    const du = rdBizDaysBetween_(t.criadoIso, dateIso);
+    const bucket = du<=3?'noPrazo':du<=15?'vencido':du<=30?'critico':'urgente';
+    return Object.assign({ _du: du, _bucket: bucket }, t);
+  });
+
+  const buckets = { noPrazo:0, vencido:0, critico:0, urgente:0 };
+  backlog.forEach(t => buckets[t._bucket]++);
+  const vencidosTotal = buckets.vencido + buckets.critico + buckets.urgente;
+
+  // Heurística: considera "Ag. Fornecedora" quando o campo Status Fornecedora
+  // menciona a fornecedora (ex.: "Aguardando Fornecedora", "Enviado p/ Fornecedora").
+  // Ajuste o regex abaixo se os valores reais da planilha usarem outro texto.
+  const agFornecedora = backlog.filter(t => /fornecedor/i.test(t.statusFornecedora||'')).length;
+
+  const curPrefix = dateIso.slice(0,7);
+  let refPrefix = curPrefix;
+  let finalizadosMesRef = DATA.allTickets.filter(t => t.finalizadoIso && t.finalizadoIso.slice(0,7)===curPrefix && t.finalizadoIso<=dateIso);
+  let isFechamento = false;
+  if (finalizadosMesRef.length === 0) {
+    refPrefix = rdPrevMonthPrefix_(dateIso);
+    finalizadosMesRef = DATA.allTickets.filter(t => t.finalizadoIso && t.finalizadoIso.slice(0,7)===refPrefix);
+    isFechamento = true;
+  }
+
+  return { dateIso, abertos, finalizados, backlog, buckets, vencidosTotal, agFornecedora,
+    refPrefix, refLabel: rdMonthLabel_(refPrefix), isFechamento, finalizadosMesRef };
+}
+
+function rdForList_(snap){
+  const set = new Set();
+  snap.backlog.forEach(t => set.add(t.fornecedora || 'Não informado'));
+  snap.abertos.forEach(t => set.add(t.fornecedora || 'Não informado'));
+  return Array.from(set).sort();
+}
+
+function rdSlaPorFornecedora_(snap){
+  const forns = rdForList_(snap);
+  const rows = forns.map(f => {
+    const finDia = snap.finalizados.filter(t => (t.fornecedora||'Não informado')===f);
+    const finMes = snap.finalizadosMesRef.filter(t => (t.fornecedora||'Não informado')===f);
+    return { fornecedora: f, dia: rdSlaStats_(finDia), mes: rdSlaStats_(finMes) };
+  }).sort((a,b) => (a.mes.tmr==null?Infinity:a.mes.tmr) - (b.mes.tmr==null?Infinity:b.mes.tmr));
+  return { rows, geralDia: rdSlaStats_(snap.finalizados), geralMes: rdSlaStats_(snap.finalizadosMesRef) };
+}
+
+function rdBacklogPorFornecedora_(snap){
+  return rdForList_(snap).map(f => {
+    const tix = snap.backlog.filter(t => (t.fornecedora||'Não informado')===f);
+    const b = { noPrazo:0, vencido:0, critico:0, urgente:0 };
+    tix.forEach(t => b[t._bucket]++);
+    return Object.assign({ fornecedora: f, total: tix.length }, b);
+  }).sort((a,b) => b.total - a.total);
+}
+
+function rdStatusBreakdown_(snap){
+  const map = {};
+  snap.backlog.forEach(t => {
+    const key = (t.statusFornecedora||'').trim() || 'Não informado';
+    map[key] = (map[key]||0) + 1;
+  });
+  return Object.keys(map).map(k => ({ status:k, qtd:map[k] })).sort((a,b) => b.qtd-a.qtd);
+}
+
+function rdTiposPorFornecedora_(snap){
+  const map = {};
+  snap.abertos.forEach(t => {
+    const tipo = t.tipo, f = t.fornecedora || 'Não informado';
+    map[tipo] = map[tipo] || { _total: 0 };
+    map[tipo][f] = (map[tipo][f]||0) + 1;
+    map[tipo]._total++;
+  });
+  const linhas = Object.keys(map).map(tipo => ({ tipo, total: map[tipo]._total, porForn: map[tipo] }))
+    .sort((a,b) => b.total - a.total);
+  const forns = rdForList_(snap).filter(f => snap.abertos.some(t => (t.fornecedora||'Não informado')===f));
+  return { forns, linhas };
+}
+
+function rdTop3Tipos_(snap){
+  const map = {};
+  snap.abertos.forEach(t => map[t.tipo] = (map[t.tipo]||0) + 1);
+  return Object.keys(map).map(t => ({ tipo:t, qtd:map[t] })).sort((a,b) => b.qtd-a.qtd).slice(0,3);
+}
+
+function rdDestaques_(snap, slaInfo){
+  const out = [];
+  const diff = snap.finalizados.length - snap.abertos.length;
+  if (diff >= 0) out.push(['🟢', `Dia com saldo positivo — ${fmt(snap.finalizados.length)} finalizados contra ${fmt(snap.abertos.length)} abertos (+${fmt(diff)})`]);
+  else out.push(['🔴', `Dia com saldo negativo — ${fmt(snap.finalizados.length)} finalizados contra ${fmt(snap.abertos.length)} abertos (${fmt(diff)})`]);
+
+  const porForn = {};
+  snap.finalizados.forEach(t => { const f=t.fornecedora||'Não informado'; porForn[f]=(porForn[f]||0)+1; });
+  const lideres = Object.keys(porForn).map(f => ({ f, n: porForn[f] })).sort((a,b) => b.n-a.n);
+  if (lideres.length) {
+    const [l1,l2,l3] = lideres;
+    let txt = `${l1.f} liderou as finalizações do dia com ${fmt(l1.n)} tickets encerrados`;
+    if (l2) txt += `, seguida de ${l2.f} (${fmt(l2.n)})`;
+    if (l3) txt += ` e ${l3.f} (${fmt(l3.n)})`;
+    out.push(['🟡', txt]);
+  }
+
+  const candSla = slaInfo.rows.filter(r => r.dia.count>=3 && r.dia.pctNoPrazo!=null).sort((a,b) => b.dia.pctNoPrazo-a.dia.pctNoPrazo);
+  if (candSla.length) {
+    const best = candSla[0];
+    out.push(['🟢', `${best.fornecedora} lidera o SLA de finalização do dia com ${fmtPct(best.dia.pctNoPrazo)} dos tickets entregues dentro do prazo (≤3 d.u.)`]);
+  }
+
+  const backlogForn = rdBacklogPorFornecedora_(snap);
+  const relevantes = slaInfo.rows.filter(r => {
+    const bf = backlogForn.find(b => b.fornecedora===r.fornecedora);
+    return bf && bf.total>=20 && r.mes.tmr!=null;
+  }).sort((a,b) => b.mes.tmr-a.mes.tmr);
+  if (relevantes.length) {
+    const worst = relevantes[0];
+    const bf = backlogForn.find(b => b.fornecedora===worst.fornecedora);
+    out.push(['🔴', `${worst.fornecedora} mantém TMR de ${rdDu_(worst.mes.tmr)}du — principal ofensora do SLA geral — com ${fmt(bf.total)} tickets em backlog, sendo ${fmt(bf.urgente)} acima de 30 d.u.`]);
+  }
+
+  const prevIso = rdPrevBizDay_(snap.dateIso);
+  const prevBacklog = DATA.allTickets.filter(t => t.criadoIso<=prevIso && (!t.finalizadoIso || t.finalizadoIso>prevIso)).length;
+  const curBacklog = snap.backlog.length;
+  const bdiff = curBacklog - prevBacklog;
+  if (bdiff <= 0) out.push(['🟢', `Backlog geral recua para ${fmt(curBacklog)} — queda de ${fmt(Math.abs(bdiff))} tickets em relação ao dia útil anterior (${fmt(prevBacklog)})`]);
+  else out.push(['🔴', `Backlog geral sobe para ${fmt(curBacklog)} — alta de ${fmt(bdiff)} tickets em relação ao dia útil anterior (${fmt(prevBacklog)})`]);
+
+  return out;
+}
+
+function rdBuildText_(snap, slaInfo, notes){
+  const d = rdParseIso_(snap.dateIso);
+  const dataLabel = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
+  const top3 = rdTop3Tipos_(snap);
+  const destaques = rdDestaques_(snap, slaInfo);
+  const mesNome = snap.refLabel.split('/')[0].toLowerCase();
+
+  const linhasForn = slaInfo.rows.filter(r => r.mes.tmr!=null)
+    .map(r => `${rdSlaEmoji_(r.mes.tmr)} ${r.fornecedora} | SLA: ${rdDu_(r.mes.tmr)}du`).join('\n\n');
+
+  const mesLinha = snap.isFechamento
+    ? `⏱️ SLA fechamento ${mesNome}: ${rdDu_(slaInfo.geralMes.tmr)} dias úteis`
+    : `⏱️ SLA médio ${mesNome}: ${rdDu_(slaInfo.geralMes.tmr)} dias úteis`;
+
+  return `📊 REPORTE DIÁRIO — ${dataLabel}
+
+Equipe: Relacionamento iVolt
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+━━━ NÚMEROS DO DIA ━━━
+
+📂 Abertos: ${fmt(snap.abertos.length)}
+
+✅ Finalizados: ${fmt(snap.finalizados.length)}
+
+⏳ Ag. Fornecedora: ${fmt(snap.agFornecedora)}
+
+🔴 SLA vencido (>3 d.u.): ${fmt(snap.vencidosTotal)}
+
+⏳ Backlog: ${fmt(snap.backlog.length)}
+
+${mesLinha}
+━━━ SLA POR FORNECEDORA ━━━
+
+${linhasForn}
+
+⚫ GERAL — SLA: ${rdDu_(slaInfo.geralMes.tmr)}du
+━━━ TOP 3 TIPOS ━━━
+
+${top3.map(t => `${t.tipo} — ${fmt(t.qtd)}`).join('\n\n')}
+━━━ ACONTECIMENTOS DO DIA ━━━
+
+${notes.acontecimentos || 'Nenhum incidente registrado no dia.'}
+
+━━━ DISPAROS ━━━
+
+${notes.disparos || 'N/A'}
+
+━━━ DESTAQUES ━━━
+
+${destaques.map(([e,t]) => `${e} ${t}`).join('\n\n')}`;
+}
+
+function rdLoadNotes_(dateIso){
+  try {
+    const all = JSON.parse(localStorage.getItem(RD_NOTES_KEY) || '{}');
+    return all[dateIso] || { acontecimentos:'', disparos:'' };
+  } catch(e) { return { acontecimentos:'', disparos:'' }; }
+}
+function rdSaveNotes_(dateIso, notes){
+  try {
+    const all = JSON.parse(localStorage.getItem(RD_NOTES_KEY) || '{}');
+    all[dateIso] = notes;
+    localStorage.setItem(RD_NOTES_KEY, JSON.stringify(all));
+  } catch(e) { /* localStorage indisponível — segue sem persistir notas */ }
+}
+
+let RD_CURRENT_DATE = null, RD_SNAP = null, RD_SLA = null;
+
+function rdRebuildTextOnly_(){
+  const notes = { acontecimentos: document.getElementById('rdAcontecimentos').value, disparos: document.getElementById('rdDisparos').value };
+  rdSaveNotes_(RD_CURRENT_DATE, notes);
+  document.getElementById('rdOutputText').value = rdBuildText_(RD_SNAP, RD_SLA, notes);
+}
+
+function rdRenderAll_(){
+  const dateIso = RD_CURRENT_DATE;
+  const snap = rdSnapshot_(dateIso);
+  const slaInfo = rdSlaPorFornecedora_(snap);
+  RD_SNAP = snap; RD_SLA = slaInfo;
+
+  const d = rdParseIso_(dateIso);
+  document.getElementById('rdDescDate').textContent =
+    'Snapshot reconstruído a partir de Criado Em / Data Finalização — ' + d.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'2-digit', year:'numeric' });
+
+  const kpis = [
+    ['Abertos no dia', fmt(snap.abertos.length)],
+    ['Finalizados no dia', fmt(snap.finalizados.length)],
+    ['Ag. Fornecedora', fmt(snap.agFornecedora)],
+    ['Backlog', fmt(snap.backlog.length)],
+    ['SLA vencido (>3du)', fmt(snap.vencidosTotal)],
+    ['SLA dia (≤3du)', slaInfo.geralDia.pctNoPrazo!=null ? fmtPct(slaInfo.geralDia.pctNoPrazo) : '—'],
+    [(snap.isFechamento?'TMR fechamento ':'TMR mês ')+snap.refLabel, slaInfo.geralMes.tmr!=null ? rdDu_(slaInfo.geralMes.tmr)+'du' : '—']
+  ];
+  document.getElementById('rdKpiGrid').innerHTML = kpis.map(([l,v]) =>
+    `<div class="kpi-card"><div class="kpi-label">${l}</div><div class="kpi-value">${v}</div></div>`).join('');
+
+  const tf = rdTiposPorFornecedora_(snap);
+  document.getElementById('rdTipoBadge').textContent = fmt(snap.abertos.length) + ' solicitações';
+  const top14 = tf.linhas.slice(0,14), resto = tf.linhas.slice(14);
+  const restoTotal = resto.reduce((s,l) => s+l.total, 0);
+  document.getElementById('rdTipoTable').innerHTML = `<thead><tr><th>Tipo de Solicitação</th>${tf.forns.map(f=>`<th>${f}</th>`).join('')}<th>Total</th></tr></thead>
+    <tbody>
+      ${top14.map(l => `<tr><td>${l.tipo}</td>${tf.forns.map(f=>`<td>${l.porForn[f]?fmt(l.porForn[f]):'—'}</td>`).join('')}<td><strong>${fmt(l.total)}</strong></td></tr>`).join('')}
+      ${resto.length ? `<tr><td>Demais tipos (${resto.length})</td>${tf.forns.map(()=>'<td>—</td>').join('')}<td><strong>${fmt(restoTotal)}</strong></td></tr>` : ''}
+      <tr style="font-weight:700;background:var(--bg)"><td>Total Geral</td>${tf.forns.map(f=>`<td>${fmt(snap.abertos.filter(t=>(t.fornecedora||'Não informado')===f).length)}</td>`).join('')}<td>${fmt(snap.abertos.length)}</td></tr>
+    </tbody>`;
+
+  document.getElementById('rdSlaDesc').textContent = snap.isFechamento
+    ? `SLA Dia = finalizados em ${d.toLocaleDateString('pt-BR')} (${fmt(snap.finalizados.length)} tickets). SLA Mês = fechamento de ${snap.refLabel} (${fmt(snap.finalizadosMesRef.length)} tickets).`
+    : `SLA Dia = finalizados em ${d.toLocaleDateString('pt-BR')} (${fmt(snap.finalizados.length)} tickets). SLA Mês = acumulado de ${snap.refLabel} até a data (${fmt(snap.finalizadosMesRef.length)} tickets).`;
+  document.getElementById('rdSlaTable').innerHTML = `<thead><tr><th>Fornecedora</th><th>SLA% dia</th><th>TMR dia</th><th>SLA% mês</th><th>TMR mês</th><th>Fin. dia</th></tr></thead>
+    <tbody>
+      ${slaInfo.rows.map(r => `<tr>
+        <td>${r.fornecedora}</td>
+        <td>${r.dia.pctNoPrazo!=null?fmtPct(r.dia.pctNoPrazo):'—'}</td>
+        <td>${r.dia.tmr!=null?rdDu_(r.dia.tmr)+'du':'—'}</td>
+        <td>${r.mes.pctNoPrazo!=null?fmtPct(r.mes.pctNoPrazo):'—'}</td>
+        <td>${r.mes.tmr!=null?rdDu_(r.mes.tmr)+'du':'—'}</td>
+        <td>${fmt(r.dia.count)}</td>
+      </tr>`).join('')}
+      <tr style="font-weight:700;background:var(--bg)">
+        <td>GERAL</td>
+        <td>${slaInfo.geralDia.pctNoPrazo!=null?fmtPct(slaInfo.geralDia.pctNoPrazo):'—'}</td>
+        <td>${slaInfo.geralDia.tmr!=null?rdDu_(slaInfo.geralDia.tmr)+'du':'—'}</td>
+        <td>${slaInfo.geralMes.pctNoPrazo!=null?fmtPct(slaInfo.geralMes.pctNoPrazo):'—'}</td>
+        <td>${slaInfo.geralMes.tmr!=null?rdDu_(slaInfo.geralMes.tmr)+'du':'—'}</td>
+        <td>${fmt(slaInfo.geralDia.count)}</td>
+      </tr>
+    </tbody>`;
+
+  const total = snap.backlog.length || 1;
+  const bucketDefs = [
+    ['noPrazo','≤ 3 d.u.','NO PRAZO', GREEN],
+    ['vencido','3–15 d.u.','VENCIDO', AMBER],
+    ['critico','15–30 d.u.','CRÍTICO', CORAL],
+    ['urgente','> 30 d.u.','URGENTE', RED]
+  ];
+  document.getElementById('rdBucketCards').innerHTML = bucketDefs.map(([key,range,label,color]) => `
+    <div class="wk-card" style="border-color:${color}">
+      <div class="wk-val" style="color:${color}">${fmt(snap.buckets[key])}</div>
+      <div class="wk-label">${range}</div>
+      <div class="wk-range">${label} · ${fmtPct(snap.buckets[key]/total*100)}</div>
+    </div>`).join('');
+
+  const backlogForn = rdBacklogPorFornecedora_(snap);
+  document.getElementById('rdBacklogTable').innerHTML = `<thead><tr><th>Fornecedora</th><th>No prazo (≤3du)</th><th>Vencido (3–15du)</th><th>Crítico (15–30du)</th><th>Urgente (&gt;30du)</th><th>Total</th></tr></thead>
+    <tbody>
+      ${backlogForn.map(b => `<tr><td>${b.fornecedora}</td><td>${fmt(b.noPrazo)}</td><td>${fmt(b.vencido)}</td><td>${fmt(b.critico)}</td><td>${fmt(b.urgente)}</td><td><strong>${fmt(b.total)}</strong></td></tr>`).join('')}
+      <tr style="font-weight:700;background:var(--bg)"><td>Total</td><td>${fmt(snap.buckets.noPrazo)}</td><td>${fmt(snap.buckets.vencido)}</td><td>${fmt(snap.buckets.critico)}</td><td>${fmt(snap.buckets.urgente)}</td><td>${fmt(snap.backlog.length)}</td></tr>
+    </tbody>`;
+
+  const statusRows = rdStatusBreakdown_(snap);
+  const top8s = statusRows.slice(0,8), restoS = statusRows.slice(8);
+  const restoSTotal = restoS.reduce((s,r) => s+r.qtd, 0);
+  document.getElementById('rdStatusTable').innerHTML = `<thead><tr><th>Status Fornecedora</th><th>Qtd.</th><th>% backlog</th></tr></thead>
+    <tbody>
+      ${top8s.map(r => `<tr><td>${r.status}</td><td>${fmt(r.qtd)}</td><td>${fmtPct(r.qtd/total*100)}</td></tr>`).join('')}
+      ${restoS.length ? `<tr><td>Outros (${restoS.length})</td><td>${fmt(restoSTotal)}</td><td>${fmtPct(restoSTotal/total*100)}</td></tr>` : ''}
+    </tbody>`;
+
+  const destaques = rdDestaques_(snap, slaInfo);
+  document.getElementById('rdDestaquesBox').innerHTML = destaques.map(([e,t]) =>
+    `<div class="alert ${e==='🔴'?'alert-amber':'alert-blue'}" style="margin-bottom:.6rem">${e} ${t}</div>`).join('');
+
+  const notes = rdLoadNotes_(dateIso);
+  document.getElementById('rdAcontecimentos').value = notes.acontecimentos;
+  document.getElementById('rdDisparos').value = notes.disparos;
+  document.getElementById('rdOutputText').value = rdBuildText_(snap, slaInfo, notes);
+}
+
+function renderRelatorioDiario(){
+  const el = document.getElementById('tab-diario');
+  if (!DATA.allTickets.length) {
+    el.innerHTML = '<div class="empty-state">Ainda não há dados importados.</div>';
+    return;
+  }
+  RD_CURRENT_DATE = rdLatestDateIso_();
+  el.innerHTML = `
+    <div class="sec-header"><span class="sec-title">Relatório Diário</span>
+      <input type="date" id="rdDatePicker" style="margin-left:auto;padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-size:12.5px">
+    </div>
+    <p class="sec-desc" id="rdDescDate"></p>
+
+    <div class="kpi-grid" id="rdKpiGrid"></div>
+
+    <div class="sec-header"><span class="sec-title">Tipos de Solicitações × Fornecedora</span><span class="sec-badge badge-blue" id="rdTipoBadge"></span></div>
+    <div class="tbl-wrap" style="margin-bottom:1.6rem"><table id="rdTipoTable"></table></div>
+
+    <div class="sec-header"><span class="sec-title">SLA por Fornecedora — Dia vs. Mês</span></div>
+    <p class="sec-desc" id="rdSlaDesc"></p>
+    <div class="tbl-wrap" style="margin-bottom:1.6rem"><table id="rdSlaTable"></table></div>
+
+    <div class="sec-header"><span class="sec-title">Backlog Operacional — Faixas de SLA</span></div>
+    <div class="wk-grid" id="rdBucketCards"></div>
+    <div class="tbl-wrap" style="margin-bottom:1.6rem"><table id="rdBacklogTable"></table></div>
+
+    <div class="sec-header"><span class="sec-title">Status do backlog (campo "Status Fornecedora")</span></div>
+    <p class="sec-desc">Reflete o status atual dos tickets ainda em aberto — para datas passadas, é o status de hoje desses tickets, não necessariamente o status que tinham naquele dia.</p>
+    <div class="tbl-wrap" style="margin-bottom:1.6rem"><table id="rdStatusTable"></table></div>
+
+    <div class="sec-header"><span class="sec-title">Destaques automáticos</span></div>
+    <div id="rdDestaquesBox" style="margin-bottom:1.6rem"></div>
+
+    <div class="sec-header"><span class="sec-title">📋 Dados Diários — texto para envio</span></div>
+    <p class="sec-desc">Preencha Acontecimentos e Disparos do dia (não vêm da planilha) e copie o texto pronto para o grupo.</p>
+    <div class="cgrid" style="margin-bottom:1rem">
+      <div class="chart-card">
+        <h3>Acontecimentos do dia</h3>
+        <textarea id="rdAcontecimentos" style="width:100%;min-height:80px;border:1px solid var(--border);border-radius:7px;padding:8px;font-size:12.5px;font-family:inherit"></textarea>
+      </div>
+      <div class="chart-card">
+        <h3>Disparos</h3>
+        <textarea id="rdDisparos" style="width:100%;min-height:80px;border:1px solid var(--border);border-radius:7px;padding:8px;font-size:12.5px;font-family:inherit"></textarea>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem">
+        <h3 style="margin:0">Texto pronto</h3>
+        <button class="btn btn-primary" id="rdCopyBtn">📋 Copiar texto</button>
+      </div>
+      <textarea id="rdOutputText" readonly style="width:100%;min-height:420px;font-family:'Courier New',monospace;font-size:12.5px;border:1px solid var(--border);border-radius:8px;padding:10px;white-space:pre-wrap"></textarea>
+    </div>
+  `;
+
+  document.getElementById('rdDatePicker').value = RD_CURRENT_DATE;
+  document.getElementById('rdDatePicker').addEventListener('change', e => { RD_CURRENT_DATE = e.target.value; rdRenderAll_(); });
+  document.getElementById('rdAcontecimentos').addEventListener('input', rdRebuildTextOnly_);
+  document.getElementById('rdDisparos').addEventListener('input', rdRebuildTextOnly_);
+  document.getElementById('rdCopyBtn').addEventListener('click', () => {
+    const ta = document.getElementById('rdOutputText');
+    ta.select();
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).catch(() => document.execCommand('copy'));
+    else document.execCommand('copy');
+    const btn = document.getElementById('rdCopyBtn');
+    const old = btn.textContent; btn.textContent = '✅ Copiado!';
+    setTimeout(() => btn.textContent = old, 1500);
+  });
+
+  rdRenderAll_();
 }
 
 loadData();
