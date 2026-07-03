@@ -1330,10 +1330,73 @@ function rdRenderAll_(){
   document.getElementById('rdOutputText').value = rdBuildText_(snap, slaInfo, notes);
 }
 
+// Aqui (site estático, sem google.script.run) o upload vai via fetch/POST
+// direto para o Web App do Apps Script — doPost (Código.js) chama o mesmo
+// receiveImportedFile() usado pelo menu do Sheets e pelo Dashboard interno.
+function rdImportWidgetHtml_(){
+  return `
+    <div class="chart-card" style="margin-bottom:1.4rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <h3 style="margin-bottom:2px">📥 Importar planilha do dia</h3>
+          <p style="font-size:12.5px;color:#888;margin:0">Suba o .xlsx exportado do sistema (aba CONSOLIDADOS) — tickets já importados (mesmo Código) são identificados e ignorados automaticamente.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="rdFileInput" accept=".xlsx" style="font-size:12px">
+          <button class="btn btn-primary" id="rdImportBtn">Importar</button>
+        </div>
+      </div>
+      <div id="rdImportStatus" style="margin-top:10px;font-size:12.5px"></div>
+    </div>`;
+}
+function rdWireImportWidget_(){
+  document.getElementById('rdImportBtn').addEventListener('click', () => {
+    const input = document.getElementById('rdFileInput');
+    const status = document.getElementById('rdImportStatus');
+    const btn = document.getElementById('rdImportBtn');
+    if (!input.files || !input.files.length) {
+      status.innerHTML = `<span style="color:${RED}">Selecione um arquivo .xlsx primeiro.</span>`;
+      return;
+    }
+    const file = input.files[0];
+    btn.disabled = true;
+    status.innerHTML = `<span style="color:${BLUE}">Enviando e processando — pode levar até 1 minuto para planilhas grandes…</span>`;
+    const reader = new FileReader();
+    reader.onload = async e => {
+      const base64 = e.target.result.split(',')[1];
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight de CORS
+          body: JSON.stringify({ fileBase64: base64, fileName: file.name })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const result = await res.json();
+        if (result.error) throw new Error(result.error);
+        if (result.warning) {
+          btn.disabled = false;
+          status.innerHTML = `<span style="color:${RED}">${result.warning}</span>`;
+          return;
+        }
+        status.innerHTML = `<span style="color:${GREEN}">Importação concluída ✓ ${fmt(result.imported)} novos tickets, ${fmt(result.skipped)} já existiam (total: ${fmt(result.total)}). Atualizando o relatório…</span>`;
+        setTimeout(() => location.reload(), 1200);
+      } catch (err) {
+        btn.disabled = false;
+        status.innerHTML = `<span style="color:${RED}">Erro: ${err.message}</span>`;
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function renderRelatorioDiario(){
   const el = document.getElementById('tab-diario');
   if (!DATA.allTickets.length) {
-    el.innerHTML = '<div class="empty-state">Ainda não há dados importados.</div>';
+    el.innerHTML = `
+      <div class="sec-header"><span class="sec-title">Relatório Diário</span></div>
+      ${rdImportWidgetHtml_()}
+      <div class="empty-state">Ainda não há dados importados — suba a primeira planilha acima.</div>`;
+    rdWireImportWidget_();
     return;
   }
   RD_CURRENT_DATE = rdLatestDateIso_();
@@ -1342,6 +1405,8 @@ function renderRelatorioDiario(){
       <input type="date" id="rdDatePicker" style="margin-left:auto;padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-size:12.5px">
     </div>
     <p class="sec-desc" id="rdDescDate"></p>
+
+    ${rdImportWidgetHtml_()}
 
     <div class="kpi-grid" id="rdKpiGrid"></div>
 
@@ -1384,6 +1449,7 @@ function renderRelatorioDiario(){
     </div>
   `;
 
+  rdWireImportWidget_();
   document.getElementById('rdDatePicker').value = RD_CURRENT_DATE;
   document.getElementById('rdDatePicker').addEventListener('change', e => { RD_CURRENT_DATE = e.target.value; rdRenderAll_(); });
   document.getElementById('rdAcontecimentos').addEventListener('input', rdRebuildTextOnly_);
