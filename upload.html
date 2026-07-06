@@ -51,7 +51,7 @@
   <div class="card">
     <div class="logo"><span class="logo-dot"></span> iGreen Energy · Tickets</div>
     <h1>Envio de planilha</h1>
-    <p class="sub">Selecione o arquivo <strong>.xlsx</strong> exportado do sistema de tickets e clique em Enviar. Tickets já importados (mesmo Código) são identificados automaticamente e não duplicam — pode enviar planilhas que se sobrepõem sem problema.</p>
+    <p class="sub">Selecione o arquivo <strong>.xlsx</strong> exportado do sistema de tickets e clique em Enviar. Tickets já importados (mesmo Código) são atualizados se algo mudou (ex.: foi finalizado) ou ignorados se nada mudou — pode enviar planilhas que se sobrepõem sem duplicar nada.</p>
     <label for="fileInput">Arquivo (.xlsx)</label>
     <input type="file" id="fileInput" accept=".xlsx">
     <button id="sendBtn">Enviar planilha</button>
@@ -94,7 +94,7 @@ document.getElementById('sendBtn').addEventListener('click', () => {
         return;
       }
       status.innerHTML = '<span style="color:var(--green)">✓ Importação concluída — ' +
-        fmt(result.imported) + ' novos tickets, ' + fmt(result.skipped) + ' já existiam (total na base: ' + fmt(result.total) + ').</span>';
+        fmt(result.imported) + ' novos, ' + fmt(result.updated||0) + ' atualizados, ' + fmt(result.skipped) + ' sem alteração (total na base: ' + fmt(result.total) + ').</span>';
       btn.disabled = false;
       input.value = '';
     } catch (err) {
