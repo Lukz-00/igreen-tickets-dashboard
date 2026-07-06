@@ -6,26 +6,48 @@
 <title>iGreen — Relatório de Tickets</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
+  /* Fonte do iGreen DS (self-hosted em fonts/ deste mesmo repo). Cai pra
+     system-ui se não carregar. */
+  @font-face {
+    font-family: 'Geist';
+    src: url('fonts/Geist-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: swap;
+  }
   :root {
-    --blue: #185FA5; --teal: #0F6E56; --coral: #D85A30; --amber: #BA7517;
-    --red: #A32D2D; --green: #1D9E75; --gray: #888780; --lgray: #C8C5BE;
-    --dark: #1E1D1B; --bg: #F7F6F2; --card: #FFFFFF; --border: #E2E0D8;
-    --lb: #E6F1FB; --lt: #E1F5EE; --lc: #FAECE7; --la: #FAEEDA; --lr: #FCEBEB;
+    /* ===== iGreen Design System — tokens convertidos de OKLCH pra hex =====
+       Fonte: @snksergio/design-system (my-app/src/styles/theme/tailwind-theme.css).
+       Este dashboard é HTML/JS puro (sem Tailwind/build step), então os tokens
+       foram convertidos uma vez pra hex — os NOMES das variáveis (--blue,
+       --coral...) continuam os mesmos de propósito, só os VALORES agora vêm
+       do DS, pra não precisar tocar em cada uso no arquivo. */
+    --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
+    --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px; --radius-full: 9999px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: rgba(145,158,171,.18) 0 0 2px 0, rgba(145,158,171,.12) 0 12px 24px -4px;
+
+    --blue: #00803C;  /* brand */         --teal: #00A8A9;   /* chart-2 */
+    --coral: #F27635; /* warning+danger */ --amber: #F5B423; /* warning */
+    --red: #EF4444;   /* danger */         --green: #29AB77; /* success */
+    --gray: #636363;  /* fg-muted */       --lgray: #9F9F9F; /* fg-subtle */
+    --dark: #0B0B0B;  /* fg-strong */      --bg: #F6F6F6;    /* bg-subtle */
+    --card: #FFFFFF;  /* bg-canvas */      --border: #E0E0E0; /* border-default */
+    --lb: #DBEDE4; --lt: #DBF3F3; --lc: #FDECE3; --la: #FEF4E0; --lr: #FDE5E5;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--dark); font-size: 14px; line-height: 1.55; }
+  body { font-family: var(--font-sans); background: var(--bg); color: var(--dark); font-size: 14px; line-height: 1.55; }
   .site-header { background: var(--dark); color: #fff; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
   .site-header .logo { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
   .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
   .site-header .meta { font-size: 12px; color: #aaa8a2; }
-  .hero { background: linear-gradient(135deg, #0D1B2A 0%, #1B3A5C 60%, #0F6E56 100%); color: #fff; padding: 2.4rem 2rem 2rem; }
+  .hero { background: linear-gradient(135deg, #0B0B0B 0%, #163D26 55%, #00803C 100%); color: #fff; padding: 2.4rem 2rem 2rem; }
   .hero-inner { max-width: 1140px; margin: 0 auto; }
   .hero h1 { font-size: clamp(1.5rem, 3.4vw, 2.2rem); font-weight: 700; }
-  .hero h1 span { color: #7EC8A8; }
-  .hero-sub { font-size: 13px; color: #aecfc4; margin: .4rem 0 1.6rem; }
+  .hero h1 span { color: #6FDBA0; }
+  .hero-sub { font-size: 13px; color: #A9D9BE; margin: .4rem 0 1.6rem; }
   .hero-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-  .hero-kpi { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: .9rem 1rem; }
-  .hero-kpi-label { font-size: 11px; color: #aecfc4; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .05em; }
+  .hero-kpi { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: var(--radius-lg); padding: .9rem 1rem; }
+  .hero-kpi-label { font-size: 11px; color: #A9D9BE; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .05em; }
   .hero-kpi-val { font-size: 1.7rem; font-weight: 700; }
   .container { max-width: 1140px; margin: 0 auto; padding: 0 2rem; }
   .tabs-wrap { background: var(--card); border-bottom: 2px solid var(--border); position: sticky; top: 56px; z-index: 90; }
@@ -37,7 +59,7 @@
   .section.active { display: block; }
   .sec-header { display: flex; align-items: center; gap: 10px; margin-bottom: .3rem; flex-wrap: wrap; }
   .sec-title { font-size: 17px; font-weight: 700; }
-  .sec-badge { font-size: 11px; padding: 3px 9px; border-radius: 20px; font-weight: 600; }
+  .sec-badge { font-size: 11px; padding: 3px 9px; border-radius: var(--radius-full); font-weight: 600; }
   .badge-blue { background: var(--lb); color: var(--blue); }
   .badge-coral { background: var(--lc); color: var(--coral); }
   .sec-desc { font-size: 13px; color: #666; margin: .3rem 0 1.2rem; }
@@ -45,7 +67,7 @@
   .ggrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.6rem; }
   .cgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 1.6rem; }
   .wk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 1.4rem; }
-  .wk-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: .8rem; text-align: center; }
+  .wk-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: .8rem; text-align: center; }
   .wk-card.peak { border-color: var(--coral); background: var(--lc); }
   .wk-label { font-size: 11px; color: #888; margin-bottom: 4px; }
   .wk-star { color: var(--coral); margin-left: 3px; }
@@ -53,30 +75,30 @@
   .wk-range { font-size: 10.5px; color: #999; margin-top: 2px; }
   tr.tr-peak td { background: var(--la) !important; }
   .mbar-cell { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .mbar-track { width: 60px; height: 8px; background: #EFEDE6; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
-  .mbar-fill { height: 100%; border-radius: 4px; }
+  .mbar-track { width: 60px; height: 8px; background: #EFEDE6; border-radius: var(--radius-xs); overflow: hidden; flex-shrink: 0; }
+  .mbar-fill { height: 100%; border-radius: var(--radius-xs); }
   .mbar-val { font-size: 11.5px; font-weight: 600; min-width: 22px; }
   .tipo-link { color: var(--blue); font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
   #modalOverlay2 { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 210; align-items: center; justify-content: center; padding: 20px; }
   #modalOverlay2.open { display: flex; }
-  #modalBox2 { background: var(--card); border-radius: 14px; width: 100%; max-width: 1080px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,.3); }
+  #modalBox2 { background: var(--card); border-radius: var(--radius-xl); width: 100%; max-width: 1080px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,.3); }
   #modalBody2 { flex: 1; overflow-y: auto; padding: 16px 20px; }
-  .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
+  .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 1.5rem; }
   .kpi-label { font-size: 11.5px; color: #777; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
   .kpi-value { font-size: 1.6rem; font-weight: 700; }
   .kpi-sub { font-size: 11.5px; color: #999; margin-top: 2px; }
-  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.3rem; margin-bottom: 1.4rem; }
+  .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 1.5rem; margin-bottom: 1.4rem; }
   .chart-card h3 { font-size: 14.5px; margin-bottom: 2px; }
   .chart-card p { font-size: 12.5px; color: #888; margin-bottom: .8rem; }
   .chart-wrap { position: relative; }
-  .tbl-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+  .tbl-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
   table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
   th { background: #F1EFE8; font-weight: 600; color: #555; font-size: 11.5px; text-transform: uppercase; }
-  .alert { display: flex; gap: 10px; padding: .9rem 1.1rem; border-radius: 10px; font-size: 13px; margin-bottom: 1.2rem; }
+  .alert { display: flex; gap: 10px; padding: .9rem 1.1rem; border-radius: var(--radius-lg); font-size: 13px; margin-bottom: 1.2rem; }
   .alert-amber { background: var(--la); color: #7a5510; }
   .picos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 1.2rem; }
-  .pico-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: .8rem; display: flex; gap: 10px; align-items: center; }
+  .pico-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: .8rem; display: flex; gap: 10px; align-items: center; }
   .pico-rank { width: 26px; height: 26px; border-radius: 50%; background: var(--lgray); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
   .pico-rank.r1 { background: var(--red); } .pico-rank.r2 { background: var(--coral); } .pico-rank.r3 { background: var(--amber); }
   .pico-val { font-weight: 700; font-size: 1.1rem; }
@@ -85,16 +107,16 @@
   .cc { cursor: pointer; color: var(--blue); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
   #modalOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
   #modalOverlay.open { display: flex; }
-  #modalBox { background: var(--card); border-radius: 14px; width: 100%; max-width: 920px; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,.3); }
+  #modalBox { background: var(--card); border-radius: var(--radius-xl); width: 100%; max-width: 920px; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,.3); }
   .modal-hdr { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .modal-title { font-size: 14px; font-weight: 700; }
-  .modal-close { background: none; border: none; cursor: pointer; color: var(--gray); font-size: 22px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+  .modal-close { background: none; border: none; cursor: pointer; color: var(--gray); font-size: 22px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); }
   .modal-close:hover { background: var(--bg); }
   .modal-srch { padding: 10px 20px; border-bottom: 1px solid var(--border); }
-  .modal-srch input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; outline: none; }
+  .modal-srch input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12px; outline: none; }
   .modal-body { flex: 1; overflow-y: auto; }
   .modal-ftr { padding: 10px 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--gray); }
-  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 13px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 13px; border-radius: var(--radius-md); font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
   .btn-primary { background: var(--blue); color: #fff; }
   .error-state { color: var(--red); }
   footer { text-align: center; font-size: 11.5px; color: #999; padding: 1.5rem 0 2rem; }
@@ -131,8 +153,10 @@
    ====================================================== */
 const API_URL = 'https://script.google.com/macros/s/AKfycbwIklYujbRvBanriVOpK6TvV6CNTSQ3-ff5w17_1MgeiWohlDiaoPuE48Mpk1Hdeit5/exec';
 
-const BLUE='#185FA5', TEAL='#0F6E56', CORAL='#D85A30', AMBER='#BA7517',
-      RED='#A32D2D', GREEN='#1D9E75', GRAY='#888780', LGRAY='#C8C5BE';
+// Mesmos valores hex do :root (tokens do iGreen DS) — repetidos aqui porque
+// Chart.js/Canvas2D não lê custom properties CSS diretamente.
+const BLUE='#00803C', TEAL='#00A8A9', CORAL='#F27635', AMBER='#F5B423',
+      RED='#EF4444', GREEN='#29AB77', GRAY='#636363', LGRAY='#9F9F9F';
 const gridC = 'rgba(0,0,0,0.06)';
 
 function fmt(n){ return Number(n||0).toLocaleString('pt-BR'); }
@@ -161,7 +185,7 @@ function renderModalTable(tix){
       <td>${t.status}</td><td>${t.fornecedora||'—'}</td><td>${t.distribuidora||'—'}</td>
       <td style="white-space:nowrap">${t.criadoEm||'—'}</td>
       <td>${t.elapsed!=null?t.elapsed.toFixed(1):'—'}</td>
-      <td style="color:${t.foraSla?'#A32D2D':'#1D9E75'}">${t.foraSla?'Fora do SLA':'No prazo'}</td>
+      <td style="color:${t.foraSla?RED:GREEN}">${t.foraSla?'Fora do SLA':'No prazo'}</td>
     </tr>`).join('')}
     ${tix.length>500 ? `<tr><td colspan="9" style="text-align:center;color:#999;padding:10px">+${fmt(tix.length-500)} adicionais — use o CSV</td></tr>` : ''}
     </tbody></table>`;
@@ -201,7 +225,9 @@ function variacaoHtml_(pct, label){
   if (label === 'baixa') return `<span style="color:${GREEN};font-weight:700">▼ ${fmtPct(pct)}</span>`;
   return `<span style="color:${GRAY}">→ estável</span>`;
 }
-const MONTH_COLORS = [BLUE, '#7C3AED', AMBER, GREEN, CORAL, '#0891B2'];
+// Paleta categórica de meses — chart-1..5 do iGreen DS (BLUE/TEAL/AMBER/GREEN
+// já são tokens DS; #8654CC/#0F74C5 = chart-5/chart-3 convertidos de OKLCH).
+const MONTH_COLORS = [BLUE, '#8654CC', AMBER, GREEN, CORAL, '#0F74C5'];
 
 function openTipoModal_(linha){
   document.getElementById('modalTitle2').textContent = linha.tipo + ' — por distribuidora';
@@ -409,9 +435,9 @@ function renderGeral(){
       <thead><tr><th>Mês</th><th>Abertos</th><th>Finalizados</th><th>Taxa fin.</th><th>Resp. fornecedora</th><th>Pendentes s/ resp.</th><th>Fora SLA (&gt;10 du)</th><th>T.méd. Rel.</th><th>T.méd. Forn.</th><th>T.méd. 1ª resp.</th></tr></thead>
       <tbody>${DATA.months.map(m => `<tr>
         <td>${m.label}</td><td>${fmt(m.abertos)}</td><td>${fmt(m.finalizados)}</td>
-        <td style="color:${m.taxaFin>=80?'#1D9E75':m.taxaFin>=50?'#BA7517':'#A32D2D'}">${fmtPct(m.taxaFin)}</td>
+        <td style="color:${m.taxaFin>=80?GREEN:m.taxaFin>=50?AMBER:RED}">${fmtPct(m.taxaFin)}</td>
         <td>${fmt(m.respThopen)}</td><td class="cc" data-mes-pend="${m.key}">${fmt(m.pendSemResp)}</td>
-        <td class="cc" style="color:${m.foraSla>0?'#A32D2D':'#1D9E75'}" data-mes-fora="${m.key}">${m.foraSla>0?fmt(m.foraSla):'✓ todos no prazo'}</td>
+        <td class="cc" style="color:${m.foraSla>0?RED:GREEN}" data-mes-fora="${m.key}">${m.foraSla>0?fmt(m.foraSla):'✓ todos no prazo'}</td>
         <td>${m.tmedRelDias!==null ? m.tmedRelDias.toFixed(1)+'d' : '—'}</td>
         <td>${m.tmedFornDias!==null ? m.tmedFornDias.toFixed(1)+'d' : '—'}</td>
         <td>${m.tmedRespDias!==null ? m.tmedRespDias.toFixed(1)+'d' : '—'}</td>
@@ -626,7 +652,7 @@ function renderGroupDetail_(dataKey, tabId, nome){
       <tbody>${f.pendentes.length ? f.pendentes.map(p => `<tr>
         <td>${p.codigo}</td><td>${p.tipo}</td><td>${p.status}</td><td>${p.fornecedora||'—'}</td><td>${p.distribuidora||'—'}</td>
         <td>${p.criadoEm}</td><td>${p.elapsed!==null?p.elapsed.toFixed(1):'—'}</td>
-        <td style="color:${p.foraSla?'#A32D2D':'#1D9E75'}">${p.foraSla?'Fora do SLA':'No prazo'}</td>
+        <td style="color:${p.foraSla?RED:GREEN}">${p.foraSla?'Fora do SLA':'No prazo'}</td>
       </tr>`).join('') : '<tr><td colspan="8" style="text-align:center;color:#999">Nenhum ticket em aberto</td></tr>'}</tbody>
     </table></div>
 
