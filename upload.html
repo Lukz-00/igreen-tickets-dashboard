@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iGreen — Envio de Planilha</title>
+<style>
+  @font-face {
+    font-family: 'Geist';
+    src: url('fonts/Geist-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  :root {
+    --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
+    --radius-md: 8px; --radius-lg: 10px;
+    --shadow-md: rgba(145,158,171,.18) 0 0 2px 0, rgba(145,158,171,.12) 0 12px 24px -4px;
+    --blue: #00803C; --red: #EF4444; --green: #29AB77;
+    --gray: #636363; --lgray: #9F9F9F;
+    --dark: #0B0B0B; --bg: #F6F6F6; --card: #FFFFFF; --border: #E0E0E0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans); background: var(--bg); color: var(--dark);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 20px; line-height: 1.55;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md); max-width: 480px; width: 100%; padding: 2rem;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 1.6rem; font-weight: 600; font-size: 15px; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
+  h1 { font-size: 1.3rem; margin-bottom: .5rem; }
+  p.sub { font-size: 13px; color: var(--gray); margin-bottom: 1.6rem; }
+  label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--gray); text-transform: uppercase; letter-spacing: .03em; }
+  input[type=file] {
+    display: block; width: 100%; margin-bottom: 1.2rem; font-size: 13px;
+    padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff;
+  }
+  button {
+    background: var(--blue); color: #fff; border: none; border-radius: var(--radius-md);
+    padding: 11px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; width: 100%;
+  }
+  button:disabled { background: var(--lgray); cursor: default; }
+  #status { margin-top: 1.1rem; font-size: 13px; line-height: 1.5; min-height: 20px; }
+  footer { margin-top: 1.6rem; text-align: center; font-size: 11.5px; color: var(--lgray); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo"><span class="logo-dot"></span> iGreen Energy · Tickets</div>
+    <h1>Envio de planilha</h1>
+    <p class="sub">Selecione o arquivo <strong>.xlsx</strong> exportado do sistema de tickets e clique em Enviar. Tickets já importados (mesmo Código) são identificados automaticamente e não duplicam — pode enviar planilhas que se sobrepõem sem problema.</p>
+    <label for="fileInput">Arquivo (.xlsx)</label>
+    <input type="file" id="fileInput" accept=".xlsx">
+    <button id="sendBtn">Enviar planilha</button>
+    <div id="status"></div>
+    <footer>iGreen Energy — BKO · os dados enviados aqui vão direto para a planilha-base de tickets</footer>
+  </div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbwIklYujbRvBanriVOpK6TvV6CNTSQ3-ff5w17_1MgeiWohlDiaoPuE48Mpk1Hdeit5/exec';
+function fmt(n){ return Number(n||0).toLocaleString('pt-BR'); }
+
+document.getElementById('sendBtn').addEventListener('click', () => {
+  const input = document.getElementById('fileInput');
+  const status = document.getElementById('status');
+  const btn = document.getElementById('sendBtn');
+
+  if (!input.files || !input.files.length) {
+    status.innerHTML = '<span style="color:var(--red)">Selecione um arquivo .xlsx primeiro.</span>';
+    return;
+  }
+  const file = input.files[0];
+  btn.disabled = true;
+  status.innerHTML = '<span style="color:var(--blue)">Enviando e processando — pode levar até 1 minuto para planilhas grandes…</span>';
+
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const base64 = e.target.result.split(',')[1];
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight de CORS
+        body: JSON.stringify({ fileBase64: base64, fileName: file.name })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+      if (result.warning) {
+        btn.disabled = false;
+        status.innerHTML = '<span style="color:var(--red)">' + result.warning + '</span>';
+        return;
+      }
+      status.innerHTML = '<span style="color:var(--green)">✓ Importação concluída — ' +
+        fmt(result.imported) + ' novos tickets, ' + fmt(result.skipped) + ' já existiam (total na base: ' + fmt(result.total) + ').</span>';
+      btn.disabled = false;
+      input.value = '';
+    } catch (err) {
+      btn.disabled = false;
+      status.innerHTML = '<span style="color:var(--red)">Erro: ' + err.message + '</span>';
+    }
+  };
+  reader.readAsDataURL(file);
+});
+</script>
+</body>
+</html>
