@@ -1301,7 +1301,7 @@ function rdRebuildTextOnly_(){
   document.getElementById('rdOutputText').value = rdBuildText_(RD_SNAP, RD_SLA, notes);
 }
 
-// Monta o payload que vai pro Apps Script (generateDailyReportXlsx) — mesmos
+// Monta o payload usado por rdBuildPrintHtml_ (impressão/PDF) — mesmos
 // dados já calculados pra tela, só reempacotados em formato de linhas/colunas.
 // Estrutura validada contra o relatório de referência (relatorio Diario 06-07.pdf).
 function rdBuildExportPayload_(){
@@ -1362,42 +1362,123 @@ function rdBuildExportPayload_(){
   };
 }
 
-function rdDownloadBase64Xlsx_(base64, fileName){
-  const byteChars = atob(base64);
-  const byteNumbers = new Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-  const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = fileName;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+// Gera o HTML de impressão (layout fiel ao relatório de referência) e abre
+// o diálogo de impressão do navegador — "Salvar como PDF" já produz o
+// arquivo, sem precisar de servidor/Drive/conversão nenhuma.
+function rdBuildPrintHtml_(payload){
+  const C = { darkGreen:'#14532D', midGreen:'#1D6B45', green:'#1D9E75', amber:'#BA7517',
+    purple:'#8654CC', blue:'#0F74C5', coral:'#D85A30', red:'#A32D2D', gray:'#777', lightBg:'#F1F4F1', border:'#DADAD5' };
+  const r = payload.resumo;
+  const mesUp = (payload.mesNome||'').toUpperCase() + (payload.isFechamento?' (FECH.)':'');
+
+  const kpiCardHtml = (val, label, color) =>
+    `<div class="kpicard"><div class="kpival" style="color:${color}">${val}</div><div class="kpilabel">${label}</div></div>`;
+
+  const tf = payload.tiposPorFornecedora;
+  const tipoRows = tf.linhas.map(l => `<tr><td>${l.tipo}</td>${l.porForn.map(v=>`<td>${v||'—'}</td>`).join('')}<td><strong>${l.total}</strong></td></tr>`).join('');
+  const demaisRow = tf.demais ? `<tr style="font-style:italic"><td>Demais tipos (${tf.demais.qtdTipos} tipos)</td>${tf.demais.porForn.map(v=>`<td>${v||'—'}</td>`).join('')}<td><strong>${tf.demais.total}</strong></td></tr>` : '';
+  const tipoTotalRow = `<tr class="total"><td>Total Geral</td>${tf.totalGeral.porForn.map(v=>`<td>${v||'—'}</td>`).join('')}<td>${tf.totalGeral.total}</td></tr>`;
+
+  const bucketColors = [C.green, C.amber, C.coral, C.red];
+  const bucketHtml = payload.bucketCards.map((b,i) =>
+    `<div class="bucketcard"><div class="bval" style="color:${bucketColors[i]}">${b.count}</div><div class="blabel">${b.label}</div><div class="bsub">${b.sub} · ${b.pct}%</div></div>`).join('') +
+    `<div class="bucketcard highlight"><div class="bval" style="color:${C.coral}">${payload.vencidosTotal}</div><div class="blabel">VENCIDOS &gt; 3 d.u.</div></div>`;
+
+  const statusHeaders = ['Ag.Resp Forn','Ag.Set Int','And. Int','Cont. Cli','Em Anál.','Env. p/Forn','Resp.','No prazo','Vencido','Crítico','Urgente','Total'];
+  const matrixRows = payload.matrix.forns.map((f,i) => `<tr><td>${f}</td>${payload.matrix.rows[i].map(v=>`<td>${v||'—'}</td>`).join('')}</tr>`).join('');
+  const matrixTotalRow = `<tr class="total"><td>Total Geral</td>${payload.matrix.totalRow.map(v=>`<td>${v||'—'}</td>`).join('')}</tr>`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório Diário — ${payload.dateLabel}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size:11px; color:#1a1a1a; padding:18px; }
+  .hdr { background:${C.darkGreen}; color:#fff; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
+  .hdr h1 { font-size:14px; font-weight:700; }
+  .hdr .badge { font-size:10px; opacity:.85; }
+  .sub { background:${C.midGreen}; color:#fff; padding:6px 14px; font-size:10px; }
+  .infobar { display:flex; border:1px solid ${C.border}; border-top:none; }
+  .infobar div { flex:1; padding:6px 10px; border-right:1px solid ${C.border}; font-size:10px; }
+  .infobar div:last-child { border-right:none; }
+  .sechdr { background:${C.darkGreen}; color:#fff; padding:6px 12px; font-size:11px; font-weight:700; margin-top:16px; }
+  .kpirow { display:flex; border:1px solid ${C.border}; border-top:none; }
+  .kpicard { flex:1; text-align:center; padding:10px 4px; border-right:1px solid #eee; }
+  .kpicard:last-child { border-right:none; }
+  .kpival { font-size:19px; font-weight:700; }
+  .kpilabel { font-size:8px; color:${C.gray}; text-transform:uppercase; margin-top:3px; letter-spacing:.02em; }
+  table { width:100%; border-collapse:collapse; font-size:9px; }
+  th,td { border:1px solid ${C.border}; padding:4px 6px; text-align:left; }
+  th { background:${C.lightBg}; font-weight:700; font-size:8.5px; text-transform:uppercase; }
+  tr.total td { font-weight:700; background:${C.lightBg}; }
+  .bucketrow { display:flex; border:1px solid ${C.border}; border-top:none; }
+  .bucketcard { flex:1; text-align:center; padding:8px 4px; border-right:1px solid #eee; }
+  .bucketcard:last-child { border-right:none; }
+  .bucketcard.highlight { border:2px solid ${C.coral}; }
+  .bval { font-size:16px; font-weight:700; }
+  .blabel { font-size:8px; color:#444; margin-top:2px; }
+  .bsub { font-size:7.5px; color:${C.gray}; margin-top:1px; }
+  .footer { font-size:8px; color:#999; margin-top:10px; text-align:center; }
+  @media print { body { padding:0; } @page { size: A4 landscape; margin: 10mm; } }
+</style></head>
+<body>
+  <div class="hdr"><h1>■ PAINEL DE TICKETS — iVolt Backoffice N2 · Relatório Diário</h1><span class="badge">Relatório Diário</span></div>
+  <div class="sub">GESTÃO DE RELACIONAMENTOS — ${payload.diaSemana || ''}, ${payload.dateLabel}</div>
+  <div class="infobar">
+    <div><strong>${payload.dateLabel}</strong></div>
+    <div>Abertos: <strong>${r.abertos}</strong></div>
+    <div>Finalizados: <strong>${r.finalizados}</strong></div>
+    <div>Backlog: <strong>${r.backlogTotal}</strong></div>
+  </div>
+
+  <div class="sechdr">1 ■ Resumo Geral</div>
+  <div class="kpirow">
+    ${kpiCardHtml(r.backlogTotal, 'BACKLOG TOTAL', C.green)}
+    ${kpiCardHtml(r.pendentes, 'PENDENTES', C.amber)}
+    ${kpiCardHtml(r.emAndamento, 'EM ANDAMENTO', C.purple)}
+    ${kpiCardHtml(r.respondido, 'RESPONDIDO', C.blue)}
+    ${kpiCardHtml(r.agFornecedora, 'AG. FORNECEDORA', C.coral)}
+  </div>
+  <div class="kpirow">
+    ${kpiCardHtml(r.abertos, 'ABERTOS NO DIA', C.green)}
+    ${kpiCardHtml(r.finalizados, 'FINALIZADOS DIA', C.green)}
+    ${kpiCardHtml(r.slaMesPct!=null?r.slaMesPct+'%':'—', 'SLA ' + mesUp, C.green)}
+    ${kpiCardHtml(r.tmrMes!=null?r.tmrMes+'du':'—', 'TMR ' + mesUp, C.green)}
+  </div>
+
+  <div class="sechdr">2 ■ Tipos de Solicitações × Fornecedora</div>
+  <table>
+    <thead><tr><th>Tipo de Solicitação</th>${tf.forns.map(f=>`<th>${f}</th>`).join('')}<th>Total</th></tr></thead>
+    <tbody>${tipoRows}${demaisRow}${tipoTotalRow}</tbody>
+  </table>
+
+  <div class="sechdr">3 ■ Backlog Operacional — Faixas de SLA</div>
+  <div class="bucketrow">${bucketHtml}</div>
+  <table>
+    <thead><tr><th>Fornecedora</th>${statusHeaders.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${matrixRows}${matrixTotalRow}</tbody>
+  </table>
+
+  <div class="footer">SLA: meta = 3 dias úteis (seg–sex). Acima de 3du = vencido. Campo: Tempo em Aberto (Dias Úteis). · iVolt Backoffice N2 · Relatório Diário · ${payload.dateLabel}</div>
+
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 150); };</script>
+</body></html>`;
 }
 
-async function rdExportXlsx_(){
-  const btn = document.getElementById('rdExportBtn');
-  const status = document.getElementById('rdExportStatus');
-  btn.disabled = true;
-  status.textContent = 'Gerando arquivo — pode levar alguns segundos…';
+function rdPrintPdf_(){
   const payload = rdBuildExportPayload_();
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'exportDailyReport', payload: payload })
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const result = await res.json();
-    if (result.error) throw new Error(result.error);
-    status.textContent = '✓ Arquivo gerado.';
-    rdDownloadBase64Xlsx_(result.base64, result.fileName);
-    setTimeout(() => { status.textContent = ''; }, 3000);
-  } catch (err) {
-    status.textContent = 'Erro: ' + err.message;
-  } finally {
-    btn.disabled = false;
+  const html = rdBuildPrintHtml_(payload);
+  const win = window.open('', '_blank');
+  const status = document.getElementById('rdExportStatus');
+  if (!win) {
+    if (status) status.innerHTML = `<span style="color:${RED}">O navegador bloqueou a janela — permita pop-ups pra este site e tente de novo.</span>`;
+    return;
   }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  if (status) status.textContent = '';
 }
+
 
 function rdRenderAll_(){
   const dateIso = RD_CURRENT_DATE;
@@ -1621,10 +1702,10 @@ function renderRelatorioDiario(){
       <textarea id="rdOutputText" readonly style="width:100%;min-height:420px;font-family:'Courier New',monospace;font-size:12.5px;border:1px solid var(--border);border-radius:8px;padding:10px;white-space:pre-wrap"></textarea>
     </div>
 
-    <div class="sec-header"><span class="sec-title">📄 Exportar para validação</span></div>
-    <p class="sec-desc">Gera um arquivo .xlsx real (com abas de resumo, tipos, SLA, backlog e o texto de envio) — pronto pra anexar em e-mail e mandar pra gestão.</p>
+    <div class="sec-header"><span class="sec-title">🖨️ Exportar para validação</span></div>
+    <p class="sec-desc">Abre uma janela com o relatório formatado igual ao modelo — na tela de impressão, escolha "Salvar como PDF" para gerar o arquivo e enviar pra gestão.</p>
     <div class="chart-card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <button class="btn btn-primary" id="rdExportBtn">📄 Baixar Excel (.xlsx)</button>
+      <button class="btn btn-primary" id="rdExportBtn">🖨️ Baixar PDF</button>
       <span id="rdExportStatus" style="font-size:12.5px;color:var(--gray)"></span>
     </div>
   `;
@@ -1643,7 +1724,7 @@ function renderRelatorioDiario(){
     const old = btn.textContent; btn.textContent = '✅ Copiado!';
     setTimeout(() => btn.textContent = old, 1500);
   });
-  document.getElementById('rdExportBtn').addEventListener('click', rdExportXlsx_);
+  document.getElementById('rdExportBtn').addEventListener('click', rdPrintPdf_);
 
   rdRenderAll_();
 }
