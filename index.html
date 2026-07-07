@@ -1067,10 +1067,10 @@ function rdSnapshot_(dateIso){
   backlog.forEach(t => buckets[t._bucket]++);
   const vencidosTotal = buckets.vencido + buckets.critico + buckets.urgente;
 
-  // Heurística: considera "Ag. Fornecedora" quando o campo Status Fornecedora
-  // menciona a fornecedora (ex.: "Aguardando Fornecedora", "Enviado p/ Fornecedora").
-  // Ajuste o regex abaixo se os valores reais da planilha usarem outro texto.
-  const agFornecedora = backlog.filter(t => /fornecedor/i.test(t.statusFornecedora||'')).length;
+  // "Ag. Fornecedora" = backlog cujo Status (não Status Fornecedora — esse
+  // campo raramente tem valor útil na base real) indica que a bola está com
+  // a fornecedora: "Enviado p/ Fornecedora" / "Aguard. resposta fornecedora".
+  const agFornecedora = backlog.filter(t => /fornecedor/i.test(t.status||'')).length;
 
   const curPrefix = dateIso.slice(0,7);
   let refPrefix = curPrefix;
@@ -1115,7 +1115,7 @@ function rdBacklogPorFornecedora_(snap){
 function rdStatusBreakdown_(snap){
   const map = {};
   snap.backlog.forEach(t => {
-    const key = (t.statusFornecedora||'').trim() || 'Não informado';
+    const key = (t.status||'').trim() || 'Não informado';
     map[key] = (map[key]||0) + 1;
   });
   return Object.keys(map).map(k => ({ status:k, qtd:map[k] })).sort((a,b) => b.qtd-a.qtd);
@@ -1340,7 +1340,7 @@ function rdRenderAll_(){
   const statusRows = rdStatusBreakdown_(snap);
   const top8s = statusRows.slice(0,8), restoS = statusRows.slice(8);
   const restoSTotal = restoS.reduce((s,r) => s+r.qtd, 0);
-  document.getElementById('rdStatusTable').innerHTML = `<thead><tr><th>Status Fornecedora</th><th>Qtd.</th><th>% backlog</th></tr></thead>
+  document.getElementById('rdStatusTable').innerHTML = `<thead><tr><th>Status</th><th>Qtd.</th><th>% backlog</th></tr></thead>
     <tbody>
       ${top8s.map(r => `<tr><td>${r.status}</td><td>${fmt(r.qtd)}</td><td>${fmtPct(r.qtd/total*100)}</td></tr>`).join('')}
       ${restoS.length ? `<tr><td>Outros (${restoS.length})</td><td>${fmt(restoSTotal)}</td><td>${fmtPct(restoSTotal/total*100)}</td></tr>` : ''}
@@ -1447,7 +1447,7 @@ function renderRelatorioDiario(){
     <div class="wk-grid" id="rdBucketCards"></div>
     <div class="tbl-wrap" style="margin-bottom:1.6rem"><table id="rdBacklogTable"></table></div>
 
-    <div class="sec-header"><span class="sec-title">Status do backlog (campo "Status Fornecedora")</span></div>
+    <div class="sec-header"><span class="sec-title">Status do backlog</span></div>
     <p class="sec-desc">Reflete o status atual dos tickets ainda em aberto — para datas passadas, é o status de hoje desses tickets, não necessariamente o status que tinham naquele dia.</p>
     <div class="tbl-wrap" style="margin-bottom:1.6rem"><table id="rdStatusTable"></table></div>
 
