@@ -1260,6 +1260,78 @@ function rdRebuildTextOnly_(){
   document.getElementById('rdOutputText').value = rdBuildText_(RD_SNAP, RD_SLA, notes);
 }
 
+// Monta o payload que vai pro Apps Script (generateDailyReportXlsx) — mesmos
+// dados já calculados pra tela, só reempacotados em formato de linhas/colunas.
+function rdBuildExportPayload_(){
+  const snap = RD_SNAP, slaInfo = RD_SLA;
+  const notes = { acontecimentos: document.getElementById('rdAcontecimentos').value, disparos: document.getElementById('rdDisparos').value };
+  const tf = rdTiposPorFornecedora_(snap);
+  const backlogForn = rdBacklogPorFornecedora_(snap);
+  const statusRows = rdStatusBreakdown_(snap);
+  const dateLabel = rdParseIso_(snap.dateIso).toLocaleDateString('pt-BR');
+
+  return {
+    dateLabel: dateLabel,
+    kpis: [
+      ['Abertos no dia', snap.abertos.length],
+      ['Finalizados no dia', snap.finalizados.length],
+      ['Ag. Fornecedora', snap.agFornecedora],
+      ['Backlog', snap.backlog.length],
+      ['SLA vencido (>3du)', snap.vencidosTotal],
+      ['SLA dia (%, ≤3du)', slaInfo.geralDia.pctNoPrazo],
+      [(snap.isFechamento ? 'TMR fechamento ' : 'TMR mês ') + snap.refLabel, slaInfo.geralMes.tmr]
+    ],
+    tiposPorFornecedora: {
+      forns: tf.forns,
+      linhas: tf.linhas.map(l => ({ tipo: l.tipo, total: l.total, porForn: tf.forns.map(f => l.porForn[f] || 0) }))
+    },
+    slaPorFornecedora: {
+      rows: slaInfo.rows.map(r => ({ fornecedora: r.fornecedora, diaPct: r.dia.pctNoPrazo, diaTmr: r.dia.tmr, mesPct: r.mes.pctNoPrazo, mesTmr: r.mes.tmr, diaCount: r.dia.count })),
+      geral: { diaPct: slaInfo.geralDia.pctNoPrazo, diaTmr: slaInfo.geralDia.tmr, mesPct: slaInfo.geralMes.pctNoPrazo, mesTmr: slaInfo.geralMes.tmr, diaCount: slaInfo.geralDia.count }
+    },
+    backlogPorFornecedora: backlogForn,
+    statusBreakdown: statusRows,
+    textoWhatsApp: rdBuildText_(snap, slaInfo, notes)
+  };
+}
+
+function rdDownloadBase64Xlsx_(base64, fileName){
+  const byteChars = atob(base64);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+async function rdExportXlsx_(){
+  const btn = document.getElementById('rdExportBtn');
+  const status = document.getElementById('rdExportStatus');
+  btn.disabled = true;
+  status.textContent = 'Gerando arquivo — pode levar alguns segundos…';
+  const payload = rdBuildExportPayload_();
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'exportDailyReport', payload: payload })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const result = await res.json();
+    if (result.error) throw new Error(result.error);
+    status.textContent = '✓ Arquivo gerado.';
+    rdDownloadBase64Xlsx_(result.base64, result.fileName);
+    setTimeout(() => { status.textContent = ''; }, 3000);
+  } catch (err) {
+    status.textContent = 'Erro: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function rdRenderAll_(){
   const dateIso = RD_CURRENT_DATE;
   const snap = rdSnapshot_(dateIso);
@@ -1473,6 +1545,13 @@ function renderRelatorioDiario(){
       </div>
       <textarea id="rdOutputText" readonly style="width:100%;min-height:420px;font-family:'Courier New',monospace;font-size:12.5px;border:1px solid var(--border);border-radius:8px;padding:10px;white-space:pre-wrap"></textarea>
     </div>
+
+    <div class="sec-header"><span class="sec-title">📄 Exportar para validação</span></div>
+    <p class="sec-desc">Gera um arquivo .xlsx real (com abas de resumo, tipos, SLA, backlog e o texto de envio) — pronto pra anexar em e-mail e mandar pra gestão.</p>
+    <div class="chart-card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <button class="btn btn-primary" id="rdExportBtn">📄 Baixar Excel (.xlsx)</button>
+      <span id="rdExportStatus" style="font-size:12.5px;color:var(--gray)"></span>
+    </div>
   `;
 
   rdWireImportWidget_();
@@ -1489,6 +1568,7 @@ function renderRelatorioDiario(){
     const old = btn.textContent; btn.textContent = '✅ Copiado!';
     setTimeout(() => btn.textContent = old, 1500);
   });
+  document.getElementById('rdExportBtn').addEventListener('click', rdExportXlsx_);
 
   rdRenderAll_();
 }
