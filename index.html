@@ -56,7 +56,13 @@
   .tab:hover { color: var(--dark); }
   .tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
   .tab-dropdown { position: relative; }
-  .tab-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); min-width: 150px; z-index: 95; padding: 6px; margin-top: 2px; }
+  .tab-dropdown-menu {
+    display: none; position: absolute; top: 100%; left: 0; margin-top: 10px;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: 0 10px 28px rgba(20,30,25,.14), 0 2px 8px rgba(20,30,25,.08);
+    min-width: 160px; max-height: 280px; overflow-y: auto; z-index: 95; padding: 6px;
+  }
+  .tab-dropdown-menu::before { content: ''; position: absolute; top: -6px; left: 18px; width: 10px; height: 10px; background: var(--card); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg); }
   .tab-dropdown.open .tab-dropdown-menu { display: block; }
   .tab-dropdown-item { padding: 7px 11px; font-size: 12.5px; font-weight: 500; color: var(--dark); cursor: pointer; border-radius: var(--radius-sm); white-space: nowrap; }
   .tab-dropdown-item:hover { background: var(--bg); }
