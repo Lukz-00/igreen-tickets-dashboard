@@ -412,10 +412,10 @@ function buildShell(){
   sections.push({ id: 'geral', label: 'Visão Geral', render: renderGeral });
   if (DATA.fornecedoras.length > 0) sections.push({ id: 'fornecedoras', label: 'Fornecedoras', render: renderFornecedoras });
   if (DATA.distribuidoras && DATA.distribuidoras.length > 0) sections.push({ id: 'distribuidoras', label: 'Distribuidoras', render: renderDistribuidoras });
-  DATA.months.forEach(m => sections.push({ id: 'm-' + m.key, label: m.label, render: () => renderMes(m), isMonth: true }));
   sections.push({ id: 'sla', label: 'SLA & Tempos', render: renderSla });
   sections.push({ id: 'picos', label: 'Picos & Semanas', render: renderPicos });
   sections.push({ id: 'reab', label: 'Reaberturas', render: renderReab });
+  DATA.months.forEach(m => sections.push({ id: 'm-' + m.key, label: m.label, render: () => renderMes(m), isMonth: true }));
 
   // Meses agrupados num único tab-dropdown "Meses ▾" em vez de uma aba por
   // mês (evitava rolagem horizontal com 5+ abas de mês na barra principal).
