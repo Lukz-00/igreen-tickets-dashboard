@@ -55,6 +55,11 @@
   .tab { padding: .85rem 1.3rem; font-size: 13px; font-weight: 500; color: var(--gray); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
   .tab:hover { color: var(--dark); }
   .tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
+  .tab-dropdown { position: relative; }
+  .tab-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); min-width: 150px; z-index: 95; padding: 6px; margin-top: 2px; }
+  .tab-dropdown.open .tab-dropdown-menu { display: block; }
+  .tab-dropdown-item { padding: 7px 11px; font-size: 12.5px; font-weight: 500; color: var(--dark); cursor: pointer; border-radius: var(--radius-sm); white-space: nowrap; }
+  .tab-dropdown-item:hover { background: var(--bg); }
   .section { display: none; padding: 1.8rem 0 3rem; }
   .section.active { display: block; }
   .sec-header { display: flex; align-items: center; gap: 10px; margin-bottom: .3rem; flex-wrap: wrap; }
@@ -402,18 +407,45 @@ function buildShell(){
   sections.push({ id: 'geral', label: 'Visão Geral', render: renderGeral });
   if (DATA.fornecedoras.length > 0) sections.push({ id: 'fornecedoras', label: 'Fornecedoras', render: renderFornecedoras });
   if (DATA.distribuidoras && DATA.distribuidoras.length > 0) sections.push({ id: 'distribuidoras', label: 'Distribuidoras', render: renderDistribuidoras });
-  DATA.months.forEach(m => sections.push({ id: 'm-' + m.key, label: m.label, render: () => renderMes(m) }));
+  DATA.months.forEach(m => sections.push({ id: 'm-' + m.key, label: m.label, render: () => renderMes(m), isMonth: true }));
   sections.push({ id: 'sla', label: 'SLA & Tempos', render: renderSla });
   sections.push({ id: 'picos', label: 'Picos & Semanas', render: renderPicos });
   sections.push({ id: 'reab', label: 'Reaberturas', render: renderReab });
 
-  document.getElementById('tabsBar').innerHTML = sections.map((s,i) =>
-    `<div class="tab${i===0?' active':''}" data-id="${s.id}">${s.label}</div>`).join('');
+  // Meses agrupados num único tab-dropdown "Meses ▾" em vez de uma aba por
+  // mês (evitava rolagem horizontal com 5+ abas de mês na barra principal).
+  const monthSections = sections.filter(s => s.isMonth);
+  let monthTabDone = false;
+  document.getElementById('tabsBar').innerHTML = sections.map((s,i) => {
+    if (s.isMonth) {
+      if (monthTabDone) return '';
+      monthTabDone = true;
+      return `<div class="tab tab-dropdown" data-dropdown="months">
+        <span class="tab-dropdown-label">Meses ▾</span>
+        <div class="tab-dropdown-menu">
+          ${monthSections.map(m => `<div class="tab-dropdown-item" data-id="${m.id}">${m.label}</div>`).join('')}
+        </div>
+      </div>`;
+    }
+    return `<div class="tab${i===0?' active':''}" data-id="${s.id}">${s.label}</div>`;
+  }).join('');
   document.getElementById('sectionsContainer').innerHTML = sections.map((s,i) =>
     `<div class="section${i===0?' active':''}" id="tab-${s.id}"></div>`).join('');
 
-  document.querySelectorAll('.tab').forEach(tabEl => {
+  document.querySelectorAll('.tab[data-id]').forEach(tabEl => {
     tabEl.addEventListener('click', () => showTab(tabEl.dataset.id));
+  });
+  document.querySelectorAll('.tab-dropdown-item').forEach(item => {
+    item.addEventListener('click', e => { e.stopPropagation(); showTab(item.dataset.id); });
+  });
+  document.querySelectorAll('.tab-dropdown').forEach(dd => {
+    dd.addEventListener('click', e => {
+      if (e.target.closest('.tab-dropdown-item')) return;
+      dd.classList.toggle('open');
+    });
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.tab-dropdown')) document.querySelectorAll('.tab-dropdown.open').forEach(dd => dd.classList.remove('open'));
   });
 }
 
@@ -421,7 +453,18 @@ function showTab(id){
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
-  document.querySelector('.tab[data-id="' + id + '"]').classList.add('active');
+  const directTab = document.querySelector('.tab[data-id="' + id + '"]');
+  if (directTab) {
+    directTab.classList.add('active');
+  } else {
+    const dropdownTab = document.querySelector('.tab-dropdown');
+    const s = sections.find(s => s.id === id);
+    if (dropdownTab && s) {
+      dropdownTab.classList.add('active');
+      dropdownTab.classList.remove('open');
+      dropdownTab.querySelector('.tab-dropdown-label').textContent = s.label + ' ▾';
+    }
+  }
   if (!rendered[id]) {
     const s = sections.find(s => s.id === id);
     s.render();
