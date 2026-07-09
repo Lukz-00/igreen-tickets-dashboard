@@ -55,16 +55,15 @@
   .tab { padding: .85rem 1.3rem; font-size: 13px; font-weight: 500; color: var(--gray); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
   .tab:hover { color: var(--dark); }
   .tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
-  .tab-dropdown { position: relative; }
-  .tab-dropdown-menu {
-    display: none; position: absolute; top: 100%; left: 0; margin-top: 10px;
-    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md);
-    box-shadow: 0 10px 28px rgba(20,30,25,.14), 0 2px 8px rgba(20,30,25,.08);
-    min-width: 160px; max-height: 280px; overflow-y: auto; z-index: 95; padding: 6px;
+  .tab-dropdown.open { color: var(--blue); font-weight: 600; }
+  /* Menu flutuante — anexado ao <body> via JS (position:fixed), não é
+     filho da barra sticky, então nunca fica preso ao stacking context dela. */
+  .tab-dropdown-menu-floating {
+    position: fixed; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: 0 16px 40px rgba(20,30,25,.22), 0 4px 14px rgba(20,30,25,.12);
+    min-width: 170px; max-height: 320px; overflow-y: auto; z-index: 9999; padding: 6px;
   }
-  .tab-dropdown-menu::before { content: ''; position: absolute; top: -6px; left: 18px; width: 10px; height: 10px; background: var(--card); border-left: 1px solid var(--border); border-top: 1px solid var(--border); transform: rotate(45deg); }
-  .tab-dropdown.open .tab-dropdown-menu { display: block; }
-  .tab-dropdown-item { padding: 7px 11px; font-size: 12.5px; font-weight: 500; color: var(--dark); cursor: pointer; border-radius: var(--radius-sm); white-space: nowrap; }
+  .tab-dropdown-item { padding: 8px 12px; font-size: 12.5px; font-weight: 500; color: var(--dark); cursor: pointer; border-radius: var(--radius-sm); white-space: nowrap; }
   .tab-dropdown-item:hover { background: var(--bg); }
   .section { display: none; padding: 1.8rem 0 3rem; }
   .section.active { display: block; }
@@ -420,18 +419,17 @@ function buildShell(){
 
   // Meses agrupados num único tab-dropdown "Meses ▾" em vez de uma aba por
   // mês (evitava rolagem horizontal com 5+ abas de mês na barra principal).
+  // O menu em si é renderizado fora da barra (anexado ao <body>, position:
+  // fixed) pra escapar do stacking context da barra sticky — como filho
+  // dela, mesmo com z-index alto, o menu ficava "preso" visualmente atrás
+  // do conteúdo da página em vez de flutuar por cima de tudo.
   const monthSections = sections.filter(s => s.isMonth);
   let monthTabDone = false;
   document.getElementById('tabsBar').innerHTML = sections.map((s,i) => {
     if (s.isMonth) {
       if (monthTabDone) return '';
       monthTabDone = true;
-      return `<div class="tab tab-dropdown" data-dropdown="months">
-        <span class="tab-dropdown-label">Meses ▾</span>
-        <div class="tab-dropdown-menu">
-          ${monthSections.map(m => `<div class="tab-dropdown-item" data-id="${m.id}">${m.label}</div>`).join('')}
-        </div>
-      </div>`;
+      return `<div class="tab tab-dropdown" data-dropdown="months"><span class="tab-dropdown-label">Meses ▾</span></div>`;
     }
     return `<div class="tab${i===0?' active':''}" data-id="${s.id}">${s.label}</div>`;
   }).join('');
@@ -441,18 +439,35 @@ function buildShell(){
   document.querySelectorAll('.tab[data-id]').forEach(tabEl => {
     tabEl.addEventListener('click', () => showTab(tabEl.dataset.id));
   });
-  document.querySelectorAll('.tab-dropdown-item').forEach(item => {
-    item.addEventListener('click', e => { e.stopPropagation(); showTab(item.dataset.id); });
+  document.querySelector('.tab-dropdown').addEventListener('click', e => {
+    e.stopPropagation();
+    if (monthDropdownEl_) closeMonthDropdown_(); else openMonthDropdown_(e.currentTarget, monthSections);
   });
-  document.querySelectorAll('.tab-dropdown').forEach(dd => {
-    dd.addEventListener('click', e => {
-      if (e.target.closest('.tab-dropdown-item')) return;
-      dd.classList.toggle('open');
-    });
+  document.addEventListener('click', () => closeMonthDropdown_());
+  window.addEventListener('scroll', () => closeMonthDropdown_(), true);
+  window.addEventListener('resize', () => closeMonthDropdown_());
+}
+
+let monthDropdownEl_ = null;
+function closeMonthDropdown_(){
+  if (monthDropdownEl_) { monthDropdownEl_.remove(); monthDropdownEl_ = null; }
+  const dd = document.querySelector('.tab-dropdown');
+  if (dd) dd.classList.remove('open');
+}
+function openMonthDropdown_(anchorEl, monthSections){
+  const rect = anchorEl.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'tab-dropdown-menu-floating';
+  menu.style.top = Math.round(rect.bottom + 8) + 'px';
+  menu.style.left = Math.round(rect.left) + 'px';
+  menu.innerHTML = monthSections.map(m => `<div class="tab-dropdown-item" data-id="${m.id}">${m.label}</div>`).join('');
+  menu.addEventListener('click', e => e.stopPropagation());
+  menu.querySelectorAll('.tab-dropdown-item').forEach(item => {
+    item.addEventListener('click', () => { showTab(item.dataset.id); closeMonthDropdown_(); });
   });
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.tab-dropdown')) document.querySelectorAll('.tab-dropdown.open').forEach(dd => dd.classList.remove('open'));
-  });
+  document.body.appendChild(menu);
+  monthDropdownEl_ = menu;
+  anchorEl.classList.add('open');
 }
 
 function showTab(id){
@@ -467,7 +482,6 @@ function showTab(id){
     const s = sections.find(s => s.id === id);
     if (dropdownTab && s) {
       dropdownTab.classList.add('active');
-      dropdownTab.classList.remove('open');
       dropdownTab.querySelector('.tab-dropdown-label').textContent = s.label + ' ▾';
     }
   }
