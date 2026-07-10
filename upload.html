@@ -15,7 +15,7 @@
     --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
     --radius-md: 8px; --radius-lg: 10px;
     --shadow-md: rgba(145,158,171,.18) 0 0 2px 0, rgba(145,158,171,.12) 0 12px 24px -4px;
-    --blue: #00803C; --red: #EF4444; --green: #29AB77;
+    --blue: #00803C; --red: #EF4444; --green: #29AB77; --amber: #B7791F;
     --gray: #636363; --lgray: #9F9F9F;
     --dark: #0B0B0B; --bg: #F6F6F6; --card: #FFFFFF; --border: #E0E0E0;
   }
@@ -34,16 +34,47 @@
   h1 { font-size: 1.3rem; margin-bottom: .5rem; }
   p.sub { font-size: 13px; color: var(--gray); margin-bottom: 1.6rem; }
   label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--gray); text-transform: uppercase; letter-spacing: .03em; }
-  input[type=file] {
-    display: block; width: 100%; margin-bottom: 1.2rem; font-size: 13px;
-    padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff;
+  .field { margin-bottom: 1.2rem; }
+  .field.shake { animation: shake .3s; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
   }
+  select, input[type=text], input[type=file] {
+    display: block; width: 100%; font-size: 13px;
+    padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: #fff; color: var(--dark); font-family: inherit;
+  }
+  select:invalid { color: var(--gray); }
+  .field.invalid select, .field.invalid input[type=text], .field.invalid input[type=file] {
+    border-color: var(--red);
+    box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+  }
+  .field-hint { font-size: 11.5px; color: var(--red); margin-top: 5px; display: none; }
+  .field.invalid .field-hint { display: block; }
   button {
     background: var(--blue); color: #fff; border: none; border-radius: var(--radius-md);
     padding: 11px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; width: 100%;
   }
-  button:disabled { background: var(--lgray); cursor: default; }
+  button:disabled { background: var(--lgray); cursor: not-allowed; }
   #status { margin-top: 1.1rem; font-size: 13px; line-height: 1.5; min-height: 20px; }
+  .support-note {
+    margin-top: 1.4rem; padding: 10px 12px; background: #FFF8E8; border: 1px solid #F0DBA3;
+    border-radius: var(--radius-md); font-size: 12px; color: var(--amber); line-height: 1.5;
+  }
+  .summary {
+    margin-top: 1.1rem; padding: 14px; background: #F0FAF5; border: 1px solid #BFE8D3;
+    border-radius: var(--radius-md); font-size: 12.5px;
+  }
+  .summary h3 { font-size: 13px; margin-bottom: 8px; color: var(--dark); }
+  .summary-row { display: flex; justify-content: space-between; padding: 3px 0; }
+  .summary-row span:first-child { color: var(--gray); }
+  .summary-row span:last-child { font-weight: 600; }
+  .summary-warning {
+    margin-top: 8px; padding: 8px 10px; background: #FFF3E0; border: 1px solid #F0C877;
+    border-radius: var(--radius-md); color: var(--amber); font-size: 11.5px; line-height: 1.5;
+  }
   footer { margin-top: 1.6rem; text-align: center; font-size: 11.5px; color: var(--lgray); }
 </style>
 </head>
@@ -51,29 +82,139 @@
   <div class="card">
     <div class="logo"><span class="logo-dot"></span> iGreen Energy · Tickets</div>
     <h1>Envio de planilha</h1>
-    <p class="sub">Selecione o arquivo <strong>.xlsx</strong> exportado do sistema de tickets e clique em Enviar. Tickets já importados (mesmo Código) são atualizados se algo mudou (ex.: foi finalizado) ou ignorados se nada mudou — pode enviar planilhas que se sobrepõem sem duplicar nada.</p>
-    <label for="fileInput">Arquivo (.xlsx)</label>
-    <input type="file" id="fileInput" accept=".xlsx">
-    <button id="sendBtn">Enviar planilha</button>
+    <p class="sub">Selecione o fornecedor, identifique a carga e escolha o arquivo <strong>.xlsx</strong> exportado do sistema de tickets. Tickets já importados (mesmo Código) são atualizados se algo mudou (ex.: foi finalizado) ou ignorados se nada mudou — pode enviar planilhas que se sobrepõem sem duplicar nada.</p>
+
+    <div class="field" id="fieldFornecedor">
+      <label for="fornecedorSelect">Fornecedor</label>
+      <select id="fornecedorSelect">
+        <option value="" selected disabled>Selecione o fornecedor…</option>
+        <option value="SUNNE">Sunne</option>
+        <option value="EDP">EDP</option>
+        <option value="SOLATIO">Solatio</option>
+        <option value="BC">BC</option>
+        <option value="MATRIX">Matrix</option>
+        <option value="OUTRO">Outro</option>
+      </select>
+      <div class="field-hint">Selecione o fornecedor da planilha.</div>
+    </div>
+
+    <div class="field" id="fieldTag">
+      <label for="tagInput">Descrição / tag da carga</label>
+      <input type="text" id="tagInput" placeholder="Ex: Fatura Sunne - Julho/2026" maxlength="120">
+      <div class="field-hint">Descreva a carga (ex.: fornecedor + mês/ano).</div>
+    </div>
+
+    <div class="field" id="fieldFile">
+      <label for="fileInput">Arquivo (.xlsx)</label>
+      <input type="file" id="fileInput" accept=".xlsx">
+      <div class="field-hint">Escolha o arquivo .xlsx exportado do sistema.</div>
+    </div>
+
+    <button id="sendBtn" disabled>Enviar planilha</button>
     <div id="status"></div>
+    <div id="summary"></div>
+
+    <div class="support-note">
+      ⚠️ Em caso de erro no processamento, entre em contato com a <strong>Equipe de Projetos</strong>.
+    </div>
+
     <footer>iGreen Energy — BKO · os dados enviados aqui vão direto para a planilha-base de tickets</footer>
   </div>
 
 <script>
 const API_URL = 'https://script.google.com/macros/s/AKfycbwIklYujbRvBanriVOpK6TvV6CNTSQ3-ff5w17_1MgeiWohlDiaoPuE48Mpk1Hdeit5/exec';
+const FORNECEDOR_LABELS = { SUNNE: 'Sunne', EDP: 'EDP', SOLATIO: 'Solatio', BC: 'BC', MATRIX: 'Matrix', OUTRO: 'Outro' };
 function fmt(n){ return Number(n||0).toLocaleString('pt-BR'); }
 
-document.getElementById('sendBtn').addEventListener('click', () => {
-  const input = document.getElementById('fileInput');
-  const status = document.getElementById('status');
-  const btn = document.getElementById('sendBtn');
+const fornecedorSelect = document.getElementById('fornecedorSelect');
+const tagInput = document.getElementById('tagInput');
+const fileInput = document.getElementById('fileInput');
+const sendBtn = document.getElementById('sendBtn');
+const status = document.getElementById('status');
+const summary = document.getElementById('summary');
 
-  if (!input.files || !input.files.length) {
-    status.innerHTML = '<span style="color:var(--red)">Selecione um arquivo .xlsx primeiro.</span>';
+const fields = {
+  fornecedor: { el: document.getElementById('fieldFornecedor'), valid: () => !!fornecedorSelect.value },
+  tag: { el: document.getElementById('fieldTag'), valid: () => tagInput.value.trim().length >= 3 },
+  file: { el: document.getElementById('fieldFile'), valid: () => fileInput.files && fileInput.files.length > 0 }
+};
+
+function isFormValid() {
+  return Object.values(fields).every(f => f.valid());
+}
+
+// Mantém o botão desabilitado até os 3 campos estarem preenchidos —
+// evita subir planilha sem identificar fornecedor/carga por esquecimento.
+function refreshButtonState() {
+  sendBtn.disabled = !isFormValid();
+}
+fornecedorSelect.addEventListener('change', refreshButtonState);
+tagInput.addEventListener('input', refreshButtonState);
+fileInput.addEventListener('change', refreshButtonState);
+
+function markInvalidFields() {
+  let firstInvalid = null;
+  Object.values(fields).forEach(f => {
+    const invalid = !f.valid();
+    f.el.classList.toggle('invalid', invalid);
+    if (invalid) {
+      f.el.classList.remove('shake');
+      void f.el.offsetWidth; // reinicia a animação se já estava marcado
+      f.el.classList.add('shake');
+      if (!firstInvalid) firstInvalid = f.el;
+    }
+  });
+  if (firstInvalid) firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+[fornecedorSelect, tagInput, fileInput].forEach((el, i) => {
+  const key = Object.keys(fields)[i];
+  el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+    if (fields[key].valid()) fields[key].el.classList.remove('invalid');
+  });
+});
+
+function renderSummary(result) {
+  const selecionado = FORNECEDOR_LABELS[result.fornecedor] || result.fornecedor || '—';
+  const porForn = result.porFornecedora || {};
+  const entradasForn = Object.entries(porForn).sort((a, b) => b[1] - a[1]);
+  const totalNovaInfo = (result.imported || 0) + (result.updated || 0);
+
+  let html = '<h3>Resumo da carga</h3>';
+  html += '<div class="summary-row"><span>Fornecedor selecionado</span><span>' + selecionado + '</span></div>';
+  html += '<div class="summary-row"><span>Tag</span><span>' + (result.tag || '—') + '</span></div>';
+  html += '<div class="summary-row"><span>Registros novos</span><span>' + fmt(result.imported) + '</span></div>';
+  html += '<div class="summary-row"><span>Registros atualizados</span><span>' + fmt(result.updated) + '</span></div>';
+  html += '<div class="summary-row"><span>Sem alteração</span><span>' + fmt(result.skipped) + '</span></div>';
+  html += '<div class="summary-row"><span>Total na base</span><span>' + fmt(result.total) + '</span></div>';
+
+  // Confere se a planilha realmente é do fornecedor escolhido no formulário —
+  // se a maioria dos registros com informação nova for de outro fornecedor,
+  // avisa (evita planilha da EDP marcada como "Sunne" por engano).
+  if (totalNovaInfo > 0 && entradasForn.length > 0) {
+    const [fornDominante, qtdDominante] = entradasForn[0];
+    const bateuComSelecionado = fornDominante === result.fornecedor ||
+      (FORNECEDOR_LABELS[result.fornecedor] || '').toUpperCase() === fornDominante.toUpperCase();
+    if (!bateuComSelecionado) {
+      html += '<div class="summary-warning">⚠️ Você selecionou <strong>' + selecionado +
+        '</strong>, mas a maioria dos registros novos/atualizados nesta planilha é de <strong>' +
+        fornDominante + '</strong> (' + fmt(qtdDominante) + ' de ' + fmt(totalNovaInfo) +
+        '). Confira se o fornecedor está certo.</div>';
+    }
+  }
+
+  summary.innerHTML = html;
+}
+
+sendBtn.addEventListener('click', () => {
+  if (!isFormValid()) {
+    markInvalidFields();
     return;
   }
-  const file = input.files[0];
-  btn.disabled = true;
+
+  const file = fileInput.files[0];
+  sendBtn.disabled = true;
+  summary.innerHTML = '';
   status.innerHTML = '<span style="color:var(--blue)">Enviando e processando — pode levar até 1 minuto para planilhas grandes…</span>';
 
   const reader = new FileReader();
@@ -83,22 +224,29 @@ document.getElementById('sendBtn').addEventListener('click', () => {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight de CORS
-        body: JSON.stringify({ fileBase64: base64, fileName: file.name })
+        body: JSON.stringify({
+          fileBase64: base64,
+          fileName: file.name,
+          fornecedor: fornecedorSelect.value,
+          tag: tagInput.value.trim()
+        })
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const result = await res.json();
       if (result.error) throw new Error(result.error);
       if (result.warning) {
-        btn.disabled = false;
+        refreshButtonState();
         status.innerHTML = '<span style="color:var(--red)">' + result.warning + '</span>';
         return;
       }
-      status.innerHTML = '<span style="color:var(--green)">✓ Importação concluída — ' +
-        fmt(result.imported) + ' novos, ' + fmt(result.updated||0) + ' atualizados, ' + fmt(result.skipped) + ' sem alteração (total na base: ' + fmt(result.total) + ').</span>';
-      btn.disabled = false;
-      input.value = '';
+      status.innerHTML = '<span style="color:var(--green)">✓ Importação concluída.</span>';
+      renderSummary(result);
+      fileInput.value = '';
+      tagInput.value = '';
+      fornecedorSelect.selectedIndex = 0;
+      refreshButtonState();
     } catch (err) {
-      btn.disabled = false;
+      refreshButtonState();
       status.innerHTML = '<span style="color:var(--red)">Erro: ' + err.message + '</span>';
     }
   };
