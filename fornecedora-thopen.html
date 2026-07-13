@@ -25,6 +25,35 @@
   .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
   h1 { font-size: 1.4rem; margin-bottom: 4px; }
   .sub { font-size: 13px; color: var(--gray); }
+
+  .upload-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md); padding: 20px; margin-bottom: 24px;
+  }
+  .upload-card h2 { font-size: 1rem; margin-bottom: 4px; }
+  .upload-card .sub { margin-bottom: 14px; }
+  .upload-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .upload-field label { display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 6px; color: var(--gray); text-transform: uppercase; letter-spacing: .03em; }
+  .upload-field input[type=file] {
+    display: block; width: 100%; font-size: 12.5px; padding: 8px; border: 1px solid var(--border);
+    border-radius: var(--radius-md); background: #fff; color: var(--dark);
+  }
+  .upload-field .hint { font-size: 11px; color: var(--lgray); margin-top: 4px; }
+  .upload-btn {
+    background: var(--green); color: #fff; border: none; border-radius: var(--radius-md);
+    padding: 11px 20px; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  }
+  .upload-btn:disabled { background: var(--lgray); cursor: not-allowed; }
+  #uploadStatus { margin-top: 12px; font-size: 12.5px; line-height: 1.5; min-height: 18px; }
+  #uploadStatus.err { color: var(--red); }
+  #uploadStatus.ok { color: var(--green); }
+  #uploadStatus.busy { color: var(--gray); }
+
+  .placeholder {
+    background: var(--card); border: 1px dashed var(--border); border-radius: var(--radius-lg);
+    padding: 30px; text-align: center; color: var(--gray); font-size: 13px;
+  }
+
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 20px 0; }
   .kpi { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 16px; }
   .kpi .lbl { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--gray); font-weight: 600; margin-bottom: 6px; }
@@ -74,31 +103,54 @@
   <header>
     <div class="logo"><span class="logo-dot"></span> iGreen Energy · Tickets</div>
     <h1>Painel de Carga — THOPEN</h1>
-    <p class="sub" id="subInfo"></p>
+    <p class="sub" id="subInfo">Carregue a planilha exportada do BKO para ver os dados.</p>
   </header>
 
-  <div class="kpis">
-    <div class="kpi"><div class="lbl">Tickets abertos</div><div class="val" id="kpiAbertos">—</div></div>
-    <div class="kpi green"><div class="lbl">Atribuídos a alguém</div><div class="val" id="kpiAtribuido">—</div></div>
-    <div class="kpi amber"><div class="lbl">Na fila (setor)</div><div class="val" id="kpiFila">—</div></div>
+  <div class="upload-card">
+    <h2>Carregar planilha do BKO</h2>
+    <p class="sub">O processamento acontece aqui no navegador — o arquivo não é enviado pra nenhum servidor.</p>
+    <div class="upload-fields">
+      <div class="upload-field">
+        <label for="fileCriacao">Planilha — modo Criação (.xlsx)</label>
+        <input type="file" id="fileCriacao" accept=".xlsx">
+        <div class="hint">Obrigatória — status atual de todos os tickets.</div>
+      </div>
+      <div class="upload-field">
+        <label for="fileUltima">Planilha — modo Última Interação (.xlsx)</label>
+        <input type="file" id="fileUltima" accept=".xlsx">
+        <div class="hint">Opcional — tem prioridade sobre a Criação quando enviada.</div>
+      </div>
+    </div>
+    <button class="upload-btn" id="processarBtn" disabled>Processar planilha</button>
+    <div id="uploadStatus"></div>
   </div>
 
-  <section>
-    <h2>Tickets por pessoa</h2>
-    <p class="sub" style="margin-bottom:12px">Contagem por quem deu a 1ª resposta ao ticket (ou, quando não houve resposta ainda, por quem está atribuído a ele).</p>
-    <div class="cards" id="pessoasCards"></div>
-  </section>
+  <div id="dataArea">
+    <div class="placeholder" id="placeholder">Nenhuma planilha carregada ainda. Envie o arquivo acima e clique em "Processar planilha".</div>
 
-  <section>
-    <h2>Fila por setor (ainda sem ninguém nomeado)</h2>
-    <div class="fila-list" id="filaList"></div>
-  </section>
+    <div class="kpis" id="kpisEl" style="display:none">
+      <div class="kpi"><div class="lbl">Tickets abertos</div><div class="val" id="kpiAbertos">—</div></div>
+      <div class="kpi green"><div class="lbl">Atribuídos a alguém</div><div class="val" id="kpiAtribuido">—</div></div>
+      <div class="kpi amber"><div class="lbl">Na fila (setor)</div><div class="val" id="kpiFila">—</div></div>
+    </div>
+
+    <section id="pessoasSection" style="display:none">
+      <h2>Tickets por pessoa</h2>
+      <p class="sub" style="margin-bottom:12px">Contagem por quem deu a 1ª resposta ao ticket (ou, quando não houve resposta ainda, por quem está atribuído a ele).</p>
+      <div class="cards" id="pessoasCards"></div>
+    </section>
+
+    <section id="filaSection" style="display:none">
+      <h2>Fila por setor (ainda sem ninguém nomeado)</h2>
+      <div class="fila-list" id="filaList"></div>
+    </section>
+  </div>
 
   <div class="support-note">
     ⚠️ Em caso de dúvidas sobre estes números, entre em contato com a <strong>Equipe de Projetos iGreen</strong>.
   </div>
 
-  <footer>iGreen Energy — BKO · dados exportados em 10/07/2026 11:46</footer>
+  <footer id="pageFooter">iGreen Energy — BKO</footer>
 </div>
 
 <div class="detail-overlay" id="detailOverlay">
@@ -113,59 +165,254 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const D = {"fornecedora": "THOPEN", "exportadoEm": "10/07/2026 11:46", "totalAbertos": 2316, "totalAtribuido": 221, "totalFila": 2095, "pessoas": [{"nome": "Thopen (genérico)", "total": 138, "viaAtribuicao": 0, "mediaDias": 59.3, "maxDias": 114, "porSetor": {"Suporte ao Cliente": 46, "Suporte ao Licenciado": 42, "Meet Call": 11, "Experiência do Cliente": 13, "Relacionamentos": 10, "ReclameAQUI": 8, "Jurídico": 5, "Scooto": 1, "Ouvidoria": 2}, "tickets": [{"codigo": "TK-20260317-7392", "tipo": "Alteração / Correção Cadastral", "setor": "Suporte ao Cliente", "dias": 114}, {"codigo": "TK-20260324-F4B7", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Suporte ao Licenciado", "dias": 108}, {"codigo": "TK-20260324-E85325", "tipo": "Layout Incorreto", "setor": "Suporte ao Licenciado", "dias": 107}, {"codigo": "TK-20260324-CFF4", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Suporte ao Cliente", "dias": 107}, {"codigo": "TK-20260326-8599969", "tipo": "Fatura em Duplicidade", "setor": "Suporte ao Cliente", "dias": 105}, {"codigo": "TK-20260327-73CF1071", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 105}, {"codigo": "TK-20260327-92001258", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 104}, {"codigo": "TK-20260327-A7E81479", "tipo": "Alteração / Correção Cadastral", "setor": "Suporte ao Licenciado", "dias": 104}, {"codigo": "TK-20260328-CB2C1543", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 103}, {"codigo": "TK-20260328-6FBF1556", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Suporte ao Licenciado", "dias": 103}, {"codigo": "TK-20260330-BB4F1713", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 102}, {"codigo": "TKAA802659", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Cliente", "dias": 100}, {"codigo": "TK0D633429", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Licenciado", "dias": 98}, {"codigo": "TKAFDC3315", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Meet Call", "dias": 98}, {"codigo": "TKB6C33407", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Suporte ao Licenciado", "dias": 98}, {"codigo": "TK7CE43417", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 98}, {"codigo": "TK3F2C3526", "tipo": "Pagamento Duplicado", "setor": "Suporte ao Licenciado", "dias": 95}, {"codigo": "TKA1203827", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Licenciado", "dias": 94}, {"codigo": "TK1A504010", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 94}, {"codigo": "TK67224346", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 93}, {"codigo": "TK68504298", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 93}, {"codigo": "TKA3924323", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 93}, {"codigo": "TKB6C34230", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 93}, {"codigo": "TK780C4103", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 93}, {"codigo": "TKFA354964", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Licenciado", "dias": 92}, {"codigo": "TKC8324839", "tipo": "Atualização da Fatura", "setor": "Suporte ao Cliente", "dias": 92}, {"codigo": "TK6B414885", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Suporte ao Cliente", "dias": 92}, {"codigo": "TK33235017", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Suporte ao Cliente", "dias": 92}, {"codigo": "TK90F65147", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Cliente", "dias": 92}, {"codigo": "TKEB3F5504", "tipo": "Pagamento Duplicado", "setor": "Experiência do Cliente", "dias": 91}, {"codigo": "TK25B75518", "tipo": "Emissão de Fatura fornecedora", "setor": "Experiência do Cliente", "dias": 91}, {"codigo": "TK83F05605", "tipo": "Emissão de Fatura fornecedora", "setor": "Experiência do Cliente", "dias": 91}, {"codigo": "TK819A5995", "tipo": "Pagamento Duplicado", "setor": "Suporte ao Cliente", "dias": 91}, {"codigo": "TKE1165753", "tipo": "Pagamento Duplicado", "setor": "Meet Call", "dias": 91}, {"codigo": "TK925C6481", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Suporte ao Licenciado", "dias": 90}, {"codigo": "TK0A866100", "tipo": "Enviar Fatura da Distribuidora", "setor": "Meet Call", "dias": 90}, {"codigo": "TKDDC06626", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Suporte ao Cliente", "dias": 88}, {"codigo": "TK8DB76717", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Suporte ao Cliente", "dias": 88}, {"codigo": "TKA3C77187", "tipo": "Desmembramento", "setor": "Meet Call", "dias": 87}, {"codigo": "TKE64C7239", "tipo": "Layout Incorreto", "setor": "Suporte ao Licenciado", "dias": 87}, {"codigo": "TK7E637119", "tipo": "Pagamento Duplicado", "setor": "Relacionamentos", "dias": 87}, {"codigo": "TKEDDF8991", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Experiência do Cliente", "dias": 85}, {"codigo": "TKE7828667", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Cliente", "dias": 85}, {"codigo": "TK08429625", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Cliente", "dias": 84}, {"codigo": "TK685611209", "tipo": "Alteração de Data de Vencimento Fixa", "setor": "Experiência do Cliente", "dias": 80}, {"codigo": "TK0F8011041", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Licenciado", "dias": 80}, {"codigo": "TKA6F311228", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 80}, {"codigo": "TKCBED10912", "tipo": "Alteração Média Contratada", "setor": "Suporte ao Cliente", "dias": 80}, {"codigo": "TKE0F410835", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Suporte ao Cliente", "dias": 80}, {"codigo": "TK331B11641", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Cliente", "dias": 79}, {"codigo": "TK87CE12300", "tipo": "Enviar Fatura da Distribuidora", "setor": "Meet Call", "dias": 78}, {"codigo": "TK9A2F12976", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Cliente", "dias": 77}, {"codigo": "TKE6D713363", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Cliente", "dias": 76}, {"codigo": "TK95B619256", "tipo": "Desconto Incorreto", "setor": "Suporte ao Licenciado", "dias": 72}, {"codigo": "TK4D2D19986", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Suporte ao Cliente", "dias": 71}, {"codigo": "TKB7EE20094", "tipo": "Injeção Abaixo do Contratado", "setor": "Meet Call", "dias": 71}, {"codigo": "TK53FE20122", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Suporte ao Licenciado", "dias": 71}, {"codigo": "TK596320161", "tipo": "Desmembramento", "setor": "Suporte ao Cliente", "dias": 71}, {"codigo": "TK9F8219845", "tipo": "Cobrança Indevida / Serasa", "setor": "Relacionamentos", "dias": 71}, {"codigo": "TKA2B820468", "tipo": "Layout Incorreto", "setor": "Meet Call", "dias": 70}, {"codigo": "TKED9520850", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Licenciado", "dias": 68}, {"codigo": "TK61C820994", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Cliente", "dias": 67}, {"codigo": "TK0F5120899", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 67}, {"codigo": "TK2DDF21168", "tipo": "Emissão de Fatura fornecedora", "setor": "Meet Call", "dias": 66}, {"codigo": "TKE95922085", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 65}, {"codigo": "TK6D9122155", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 65}, {"codigo": "TK0D5321961", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 65}, {"codigo": "TK30B722501", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Suporte ao Licenciado", "dias": 64}, {"codigo": "TK814824307", "tipo": "Atualização da Fatura", "setor": "Suporte ao Licenciado", "dias": 62}, {"codigo": "TKA5C624135", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 62}, {"codigo": "TK1A4A24036", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Licenciado", "dias": 62}, {"codigo": "TK88CC23928", "tipo": "Pagamento Duplicado", "setor": "Suporte ao Cliente", "dias": 62}, {"codigo": "TK71C924093", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 62}, {"codigo": "TK55FF26542", "tipo": "Pagamento Duplicado", "setor": "Suporte ao Cliente", "dias": 58}, {"codigo": "TK815A26891", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 58}, {"codigo": "TKDD0326652", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 58}, {"codigo": "TK1B8F31201", "tipo": "Enviar Fatura da Distribuidora", "setor": "Experiência do Cliente", "dias": 52}, {"codigo": "TKA64634659", "tipo": "Status de Injeção (pós boletagem)", "setor": "Suporte ao Cliente", "dias": 50}, {"codigo": "TK2C7934073", "tipo": "Status de Injeção (antes da boletagem)", "setor": "ReclameAQUI", "dias": 50}, {"codigo": "TK9A3D34716", "tipo": "Desconto Incorreto", "setor": "Suporte ao Licenciado", "dias": 49}, {"codigo": "TKBF4B34755", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 49}, {"codigo": "TKD66235333", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Suporte ao Cliente", "dias": 49}, {"codigo": "TKF96D35239", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Jurídico", "dias": 49}, {"codigo": "TK28D635557", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Suporte ao Cliente", "dias": 48}, {"codigo": "TK691C35650", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Licenciado", "dias": 48}, {"codigo": "TKE51735847", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 47}, {"codigo": "TK3D6836049", "tipo": "Status de Injeção (pós boletagem)", "setor": "Meet Call", "dias": 46}, {"codigo": "TK48FD36479", "tipo": "Cobrança Indevida / Serasa", "setor": "Experiência do Cliente", "dias": 45}, {"codigo": "TK5DEC36467", "tipo": "Injeção Abaixo do Contratado", "setor": "Experiência do Cliente", "dias": 45}, {"codigo": "TK462636558", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 45}, {"codigo": "TK759236985", "tipo": "Cobrança Indevida / Serasa", "setor": "Meet Call", "dias": 44}, {"codigo": "TK1C7E36804", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Jurídico", "dias": 44}, {"codigo": "TK61C938198", "tipo": "Desmembramento", "setor": "Suporte ao Cliente", "dias": 42}, {"codigo": "TKF55E39383", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 39}, {"codigo": "TK5CD240146", "tipo": "Enviar Fatura da Distribuidora", "setor": "ReclameAQUI", "dias": 38}, {"codigo": "TKFB3A40038", "tipo": "Status de Injeção (antes da boletagem)", "setor": "ReclameAQUI", "dias": 38}, {"codigo": "TK3BCA41321", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 35}, {"codigo": "TKA8F342408", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 31}, {"codigo": "TK5D3642940", "tipo": "Novo Cadastro", "setor": "Relacionamentos", "dias": 31}, {"codigo": "TK1BDC43386", "tipo": "Cobrança Indevida / Serasa", "setor": "Relacionamentos", "dias": 30}, {"codigo": "TK8D9C43141", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 30}, {"codigo": "TK03DF43320", "tipo": "Status de Injeção (pós boletagem)", "setor": "Jurídico", "dias": 30}, {"codigo": "TKD82444032", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Meet Call", "dias": 29}, {"codigo": "TK1B1F45100", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Jurídico", "dias": 27}, {"codigo": "TKD5C845180", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Licenciado", "dias": 27}, {"codigo": "TKF10E45110", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 27}, {"codigo": "TK905245272", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 27}, {"codigo": "TK704845305", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Licenciado", "dias": 27}, {"codigo": "TK367845422", "tipo": "Documento Solicitado pela Distribuidora", "setor": "Suporte ao Cliente", "dias": 25}, {"codigo": "TK46BA46027", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 24}, {"codigo": "TK075246059", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Licenciado", "dias": 24}, {"codigo": "TK3E3245806", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 24}, {"codigo": "TK38F646297", "tipo": "Pagamento Duplicado", "setor": "Suporte ao Cliente", "dias": 24}, {"codigo": "TK1C5746754", "tipo": "Status de Injeção (pós boletagem)", "setor": "Suporte ao Cliente", "dias": 23}, {"codigo": "TK53B946504", "tipo": "Desconto Incorreto", "setor": "Relacionamentos", "dias": 23}, {"codigo": "TK499C46615", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 23}, {"codigo": "TK9CE547106", "tipo": "Enviar Fatura da Distribuidora", "setor": "Relacionamentos", "dias": 23}, {"codigo": "TKC39C46481", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 23}, {"codigo": "TK019F47585", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Cliente", "dias": 22}, {"codigo": "TK58A147569", "tipo": "Cancelamento de Cliente", "setor": "ReclameAQUI", "dias": 22}, {"codigo": "TK780247197", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Cliente", "dias": 22}, {"codigo": "TKF2C148884", "tipo": "Baixa de Pagamento", "setor": "ReclameAQUI", "dias": 18}, {"codigo": "TK71BF49017", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 17}, {"codigo": "TK05A257641", "tipo": "Enviar Fatura da Distribuidora", "setor": "Suporte ao Licenciado", "dias": 16}, {"codigo": "TK963258058", "tipo": "Cancelamento de Cliente", "setor": "ReclameAQUI", "dias": 15}, {"codigo": "TKDCBD58285", "tipo": "Pagamento Duplicado", "setor": "Relacionamentos", "dias": 15}, {"codigo": "TK8E3F58785", "tipo": "Relatório de Saldo", "setor": "ReclameAQUI", "dias": 14}, {"codigo": "TK888858813", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Licenciado", "dias": 14}, {"codigo": "TK871F58794", "tipo": "Baixa de Pagamento", "setor": "Relacionamentos", "dias": 14}, {"codigo": "TK819059172", "tipo": "Baixa de Pagamento", "setor": "Relacionamentos", "dias": 14}, {"codigo": "TK122C58544", "tipo": "Cobrança Indevida / Serasa", "setor": "Relacionamentos", "dias": 14}, {"codigo": "TK601259976", "tipo": "Relatório de Saldo", "setor": "Scooto", "dias": 10}, {"codigo": "TK620D60315", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 9}, {"codigo": "TKE9C160590", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 9}, {"codigo": "TK039B61361", "tipo": "Cobrança Indevida / Serasa", "setor": "Ouvidoria", "dias": 8}, {"codigo": "TK944760997", "tipo": "Emissão de Fatura fornecedora", "setor": "ReclameAQUI", "dias": 8}, {"codigo": "TK65DE60947", "tipo": "Relatório de Saldo", "setor": "Jurídico", "dias": 8}, {"codigo": "TKFD7A62449", "tipo": "Cobrança Indevida / Serasa", "setor": "Ouvidoria", "dias": 6}]}, {"nome": "Camila Silva", "total": 27, "viaAtribuicao": 27, "mediaDias": 40.0, "maxDias": 98, "porSetor": {"Experiência do Cliente": 8, "Suporte ao Cliente": 1, "-": 3, "Jurídico": 13, "ReclameAQUI": 2}, "tickets": [{"codigo": "TK63EA3491", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 98}, {"codigo": "TKDA4A8087", "tipo": "Cobrança Indevida / Serasa", "setor": "Suporte ao Cliente", "dias": 86}, {"codigo": "FODCE212594", "tipo": "Atendimento ao Cliente", "setor": "-", "dias": 77}, {"codigo": "TKC99113844", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 73}, {"codigo": "FO256215516", "tipo": "Cancelamento de Cliente", "setor": "-", "dias": 73}, {"codigo": "TK54CE20032", "tipo": "Cancelamento de Cliente", "setor": "Experiência do Cliente", "dias": 71}, {"codigo": "TK68A321100", "tipo": "Releitura do Medidor / Refaturamento", "setor": "Experiência do Cliente", "dias": 66}, {"codigo": "TK789121574", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 66}, {"codigo": "TK536A23871", "tipo": "Desmembramento", "setor": "Experiência do Cliente", "dias": 63}, {"codigo": "TKB89E28615", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Experiência do Cliente", "dias": 56}, {"codigo": "TK6D8F36285", "tipo": "Status de Injeção (pós boletagem)", "setor": "Jurídico", "dias": 45}, {"codigo": "FO650137165", "tipo": "Atendimento ao Cliente", "setor": "-", "dias": 44}, {"codigo": "TKCBB741258", "tipo": "Enviar Fatura da Distribuidora", "setor": "Experiência do Cliente", "dias": 36}, {"codigo": "TK334A42346", "tipo": "Status de Injeção (antes da boletagem)", "setor": "Jurídico", "dias": 31}, {"codigo": "TK1D3E42744", "tipo": "Relatório de Saldo", "setor": "Jurídico", "dias": 31}, {"codigo": "TKE94C45503", "tipo": "Relatório de Saldo", "setor": "Jurídico", "dias": 25}, {"codigo": "TK10D345815", "tipo": "Relatório de Saldo", "setor": "Jurídico", "dias": 24}, {"codigo": "TKDF1446400", "tipo": "Cancelamento de Cliente", "setor": "Jurídico", "dias": 23}, {"codigo": "TKFB6E47493", "tipo": "Pagamento Duplicado", "setor": "ReclameAQUI", "dias": 22}, {"codigo": "TK5A1D49014", "tipo": "Cancelamento de Cliente", "setor": "Jurídico", "dias": 17}, {"codigo": "TKC53659357", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Jurídico", "dias": 13}, {"codigo": "TK772A59786", "tipo": "Cancelamento de Cliente", "setor": "ReclameAQUI", "dias": 10}, {"codigo": "TK701760764", "tipo": "Cobrança Indevida / Serasa", "setor": "Jurídico", "dias": 9}, {"codigo": "TK6CD562158", "tipo": "Relatório de Saldo", "setor": "Jurídico", "dias": 7}, {"codigo": "TKCDA462201", "tipo": "Cobrança Indevida / Serasa", "setor": "Jurídico", "dias": 7}, {"codigo": "TK0EA062701", "tipo": "Cobrança Indevida / Serasa", "setor": "Jurídico", "dias": 4}, {"codigo": "TK603264106", "tipo": "Relatório de Saldo", "setor": "Jurídico", "dias": 2}]}, {"nome": "Leonardo Piovezani", "total": 22, "viaAtribuicao": 22, "mediaDias": 49.9, "maxDias": 86, "porSetor": {"Suporte ao Cliente": 19, "Meet Call": 2, "Relacionamentos": 1}, "tickets": [{"codigo": "TKA1458175", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 86}, {"codigo": "TK3FB611640", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 79}, {"codigo": "TK62D512836", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 77}, {"codigo": "TK2C2D12947", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 77}, {"codigo": "TK8F1A15545", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Meet Call", "dias": 73}, {"codigo": "TK5C1B22577", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 64}, {"codigo": "TK2ABA23756", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 63}, {"codigo": "TK5EEA27848", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 57}, {"codigo": "TK951B28873", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Meet Call", "dias": 55}, {"codigo": "TK466835700", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 48}, {"codigo": "TK409136956", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 44}, {"codigo": "TK403138990", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 41}, {"codigo": "TK375739951", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 38}, {"codigo": "TKCE1C40289", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Relacionamentos", "dias": 37}, {"codigo": "TK02F440669", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 37}, {"codigo": "TKC77940297", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 37}, {"codigo": "TK8B4441868", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 34}, {"codigo": "TK3AD642199", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 32}, {"codigo": "TK8EE442572", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 31}, {"codigo": "TK434B43186", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 30}, {"codigo": "TK828944051", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 29}, {"codigo": "TK665944238", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 29}]}, {"nome": "Giovanna Borges", "total": 17, "viaAtribuicao": 0, "mediaDias": 15.9, "maxDias": 72, "porSetor": {"Suporte ao Licenciado": 8, "Meet Call": 4, "Suporte ao Cliente": 4, "ReclameAQUI": 1}, "tickets": [{"codigo": "TK88BC19574", "tipo": "Emissão de Fatura fornecedora", "setor": "Suporte ao Licenciado", "dias": 72}, {"codigo": "TKF2F219366", "tipo": "Emissão de Fatura fornecedora", "setor": "Meet Call", "dias": 72}, {"codigo": "TK27E936528", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 45}, {"codigo": "TKD70440843", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Cliente", "dias": 37}, {"codigo": "TK870648586", "tipo": "Baixa de Pagamento", "setor": "ReclameAQUI", "dias": 20}, {"codigo": "TK4DEA62275", "tipo": "Baixa de Pagamento", "setor": "Meet Call", "dias": 6}, {"codigo": "TK1D4463334", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 3}, {"codigo": "TK621564010", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Cliente", "dias": 2}, {"codigo": "TKCECF63863", "tipo": "Baixa de Pagamento", "setor": "Meet Call", "dias": 2}, {"codigo": "TKB61A63785", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 2}, {"codigo": "TKBEFF63694", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 2}, {"codigo": "TKFCEA63732", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Cliente", "dias": 2}, {"codigo": "TK7E4464995", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Cliente", "dias": 1}, {"codigo": "TKC47064632", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 1}, {"codigo": "TK6E6264696", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 1}, {"codigo": "TKFE3464858", "tipo": "Baixa de Pagamento", "setor": "Meet Call", "dias": 1}, {"codigo": "TK4F7D64813", "tipo": "Baixa de Pagamento", "setor": "Suporte ao Licenciado", "dias": 1}]}, {"nome": "Barbara Canadeo", "total": 8, "viaAtribuicao": 0, "mediaDias": 36.4, "maxDias": 94, "porSetor": {"Suporte ao Cliente": 5, "Meet Call": 2, "Relacionamentos": 1}, "tickets": [{"codigo": "TK3C503761", "tipo": "Reativação", "setor": "Suporte ao Cliente", "dias": 94}, {"codigo": "TK0B2C39424", "tipo": "Alteração de Data de Vencimento Fixa", "setor": "Suporte ao Cliente", "dias": 39}, {"codigo": "TKCA1E41212", "tipo": "Unificação de Débitos Pendentes", "setor": "Meet Call", "dias": 36}, {"codigo": "TKA36341044", "tipo": "Unificação de Débitos Pendentes", "setor": "Meet Call", "dias": 36}, {"codigo": "TK452845232", "tipo": "Alteração de Data de Vencimento Fixa", "setor": "Relacionamentos", "dias": 27}, {"codigo": "TK2ED345116", "tipo": "Alteração de Data de Vencimento Fixa", "setor": "Suporte ao Cliente", "dias": 27}, {"codigo": "TK888745545", "tipo": "Alteração de Data de Vencimento Fixa", "setor": "Suporte ao Cliente", "dias": 25}, {"codigo": "TK5BA661779", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 7}]}, {"nome": "Maria Silva", "total": 7, "viaAtribuicao": 0, "mediaDias": 9.0, "maxDias": 52, "porSetor": {"Suporte ao Cliente": 3, "Suporte ao Licenciado": 2, "Meet Call": 2}, "tickets": [{"codigo": "TK08EE31424", "tipo": "Atualização da Fatura", "setor": "Suporte ao Cliente", "dias": 52}, {"codigo": "TK6A5063060", "tipo": "Atualização da Fatura", "setor": "Suporte ao Cliente", "dias": 3}, {"codigo": "TK31BB63280", "tipo": "Atualização da Fatura", "setor": "Suporte ao Licenciado", "dias": 3}, {"codigo": "TK6AC764200", "tipo": "Atualização da Fatura", "setor": "Suporte ao Licenciado", "dias": 2}, {"codigo": "TKB19764050", "tipo": "Atualização da Fatura", "setor": "Meet Call", "dias": 2}, {"codigo": "TK9CDE64906", "tipo": "Aviso de Corte de Energia", "setor": "Suporte ao Cliente", "dias": 1}, {"codigo": "TK365165401", "tipo": "Atualização da Fatura", "setor": "Meet Call", "dias": 0}]}, {"nome": "Leonardo Pereira", "total": 2, "viaAtribuicao": 0, "mediaDias": 43.5, "maxDias": 48, "porSetor": {"Suporte ao Cliente": 2}, "tickets": [{"codigo": "TK9A9135412", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 48}, {"codigo": "TKCCCF39348", "tipo": "Documento de Cancelamento (Distrato)", "setor": "Suporte ao Cliente", "dias": 39}]}], "fila": [{"setor": "Suporte ao Cliente", "total": 1163}, {"setor": "Suporte ao Licenciado", "total": 692}, {"setor": "Meet Call", "total": 166}, {"setor": "Relacionamentos", "total": 42}, {"setor": "Ouvidoria", "total": 9}, {"setor": "Experiência do Cliente", "total": 8}, {"setor": "ReclameAQUI", "total": 5}, {"setor": "-", "total": 5}, {"setor": "Jurídico", "total": 4}, {"setor": "Scooto", "total": 1}]};
 function fmt(n){ return Number(n||0).toLocaleString('pt-BR'); }
 
-document.getElementById('subInfo').textContent =
-  D.totalAbertos + ' tickets em aberto no momento da exportação';
-document.getElementById('kpiAbertos').textContent = fmt(D.totalAbertos);
-document.getElementById('kpiAtribuido').textContent = fmt(D.totalAtribuido);
-document.getElementById('kpiFila').textContent = fmt(D.totalFila);
+/* ================= Classificação (mesma lógica do gerar_painel_fornecedora.py) ================= */
 
-const cardsEl = document.getElementById('pessoasCards');
-cardsEl.innerHTML = D.pessoas.map((p, i) => {
-  const tagsHtml = Object.entries(p.porSetor)
-    .sort((a,b) => b[1]-a[1])
-    .map(([s,c]) => '<span class="tag">' + s + ' · ' + c + '</span>').join('');
-  const viaBadge = p.viaAtribuicao > 0
-    ? '<span class="tag" title="Identificado pela atribuição do ticket, não pela 1ª resposta">📋 ' + p.viaAtribuicao + ' via atribuição</span>'
-    : '';
-  return '<div class="person-card" data-idx="' + i + '">' +
-    '<div class="nome">' + p.nome + '</div>' +
-    '<div class="total">' + fmt(p.total) + '</div>' +
-    '<div class="total-lbl">tickets em aberto</div>' +
-    '<div class="meta"><span>Média: ' + (p.mediaDias ?? '—') + ' dias</span><span>Mais antigo: ' + (p.maxDias ?? '—') + ' dias</span></div>' +
-    '<div class="tags">' + tagsHtml + viaBadge + '</div>' +
-  '</div>';
-}).join('');
+const STATUS_FECHADO = new Set(['Finalizado', 'Cancelado']);
+const THOPEN_DOMAINS = new Set(['amee.com.br', 'thopen.com']);
+const NAME_MAP = {
+  'maria.silva@amee.com.br': 'Maria Silva',
+  'barbara.canadeo@amee.com.br': 'Barbara Canadeo',
+  'giovanna.borges@amee.com.br': 'Giovanna Borges',
+  'leonardo.pereira@amee.com.br': 'Leonardo Pereira',
+  'amanda.santana@amee.com.br': 'Amanda Santana',
+  'thopen@thopen.com': 'Thopen (genérico)',
+};
+const SOURCE_SHEET_CANDIDATES = ['CONSOLIDADOS', 'Tickets - THOPEN'];
+const REQUIRED_COLS = {
+  codigo: 'Código',
+  tipo: 'Tipo',
+  status: 'Status',
+  setor: 'Setor',
+  criadoEm: 'Criado Em',
+  autorResposta: '1ª Resposta - Autor', // coluna BF
+  operadorExterno: 'Operador Externo - Fornecedora Atribuído',
+  exportadoEm: 'Exportado Em',
+};
 
-const filaEl = document.getElementById('filaList');
-const maxFila = Math.max(1, ...D.fila.map(f => f.total));
-filaEl.innerHTML = D.fila.map(f =>
-  '<div class="fila-row">' +
-    '<span class="setor-nome">' + f.setor + '</span>' +
-    '<span class="bar-track"><span class="bar-fill" style="width:' + Math.round(f.total/maxFila*100) + '%"></span></span>' +
-    '<span class="setor-total">' + fmt(f.total) + '</span>' +
-  '</div>'
-).join('');
+function displayName(email) {
+  if (NAME_MAP[email]) return NAME_MAP[email];
+  const local = email.split('@')[0];
+  return local.split('.').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+}
+
+async function parseWorkbook(file) {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const sheetName = SOURCE_SHEET_CANDIDATES.find(n => wb.SheetNames.includes(n)) || wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  if (!rows.length) throw new Error('Planilha "' + sheetName + '" está vazia.');
+
+  const header = rows[0].map(h => String(h || '').trim());
+  const idx = {};
+  const missing = [];
+  Object.entries(REQUIRED_COLS).forEach(([key, name]) => {
+    const i = header.indexOf(name);
+    idx[key] = i;
+    if (i < 0) missing.push(name);
+  });
+  if (missing.length) {
+    throw new Error('Colunas não encontradas em "' + sheetName + '": ' + missing.join(', '));
+  }
+
+  const tickets = new Map();
+  let exportDate = null;
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const codigo = row[idx.codigo];
+    if (!codigo) continue;
+    const exportado = row[idx.exportadoEm] instanceof Date ? row[idx.exportadoEm] : null;
+    if (exportado && (!exportDate || exportado > exportDate)) exportDate = exportado;
+    tickets.set(String(codigo).trim(), {
+      codigo: String(codigo).trim(),
+      tipo: String(row[idx.tipo] || '').trim(),
+      status: String(row[idx.status] || '').trim(),
+      setor: String(row[idx.setor] || '').trim() || '(sem setor)',
+      criadoEm: row[idx.criadoEm] instanceof Date ? row[idx.criadoEm] : null,
+      autorResposta: String(row[idx.autorResposta] || '').trim(),
+      operador: String(row[idx.operadorExterno] || '').trim(),
+    });
+  }
+  return { tickets, exportDate };
+}
+
+// Última Interação tem prioridade sobre Criação para o mesmo Código;
+// "Criado Em" da Criação é preservado quando a Última Interação não o tiver.
+function mergeTickets(criacao, ultima) {
+  const merged = new Map(criacao);
+  for (const [codigo, novo] of ultima) {
+    const existente = merged.get(codigo);
+    if (existente && !novo.criadoEm) novo.criadoEm = existente.criadoEm;
+    merged.set(codigo, novo);
+  }
+  return merged;
+}
+
+function buildPayload(tickets, exportDate, fornecedoraNome) {
+  const hoje = exportDate || new Date();
+  const abertos = [...tickets.values()].filter(t => !STATUS_FECHADO.has(t.status));
+
+  const filaPorSetor = new Map();
+  const pessoas = new Map();
+
+  for (const t of abertos) {
+    const dias = t.criadoEm ? Math.floor((hoje - t.criadoEm) / 86400000) : null;
+    const autor = t.autorResposta;
+    const dom = autor.includes('@') ? autor.split('@').pop().toLowerCase() : '';
+
+    let nome, via;
+    if (THOPEN_DOMAINS.has(dom)) {
+      nome = displayName(autor); via = 'resposta';
+    } else if (t.operador && t.operador !== '-') {
+      nome = t.operador; via = 'atribuicao';
+    } else {
+      filaPorSetor.set(t.setor, (filaPorSetor.get(t.setor) || 0) + 1);
+      continue;
+    }
+
+    if (!pessoas.has(nome)) pessoas.set(nome, { ticketsRaw: [], viaResposta: 0, viaAtribuicao: 0 });
+    const p = pessoas.get(nome);
+    p[via === 'resposta' ? 'viaResposta' : 'viaAtribuicao']++;
+    p.ticketsRaw.push({ codigo: t.codigo, tipo: t.tipo, setor: t.setor, dias });
+  }
+
+  const pessoasOut = [...pessoas.entries()].map(([nome, p]) => {
+    const tix = p.ticketsRaw.slice().sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0));
+    const diasValidos = tix.map(t => t.dias).filter(d => d !== null);
+    const setores = {};
+    tix.forEach(t => { setores[t.setor] = (setores[t.setor] || 0) + 1; });
+    return {
+      nome, total: tix.length, viaAtribuicao: p.viaAtribuicao,
+      mediaDias: diasValidos.length ? Math.round(diasValidos.reduce((a, b) => a + b, 0) / diasValidos.length * 10) / 10 : null,
+      maxDias: diasValidos.length ? Math.max(...diasValidos) : null,
+      porSetor: setores, tickets: tix,
+    };
+  }).sort((a, b) => b.total - a.total);
+
+  const filaOut = [...filaPorSetor.entries()]
+    .map(([setor, total]) => ({ setor, total }))
+    .sort((a, b) => b.total - a.total);
+
+  return {
+    fornecedora: fornecedoraNome,
+    exportadoEm: hoje.toLocaleString('pt-BR'),
+    totalAbertos: abertos.length,
+    totalAtribuido: pessoasOut.reduce((s, p) => s + p.total, 0),
+    totalFila: filaOut.reduce((s, f) => s + f.total, 0),
+    pessoas: pessoasOut,
+    fila: filaOut,
+  };
+}
+
+/* ================= Renderização ================= */
+
+let CURRENT_D = null;
+
+function render(D) {
+  CURRENT_D = D;
+  document.getElementById('placeholder').style.display = 'none';
+  document.getElementById('kpisEl').style.display = '';
+  document.getElementById('pessoasSection').style.display = '';
+  document.getElementById('filaSection').style.display = '';
+
+  document.getElementById('subInfo').textContent =
+    D.totalAbertos + ' tickets em aberto no momento da exportação';
+  document.getElementById('pageFooter').textContent =
+    'iGreen Energy — BKO · dados exportados em ' + D.exportadoEm;
+  document.getElementById('kpiAbertos').textContent = fmt(D.totalAbertos);
+  document.getElementById('kpiAtribuido').textContent = fmt(D.totalAtribuido);
+  document.getElementById('kpiFila').textContent = fmt(D.totalFila);
+
+  const cardsEl = document.getElementById('pessoasCards');
+  cardsEl.innerHTML = D.pessoas.map((p, i) => {
+    const tagsHtml = Object.entries(p.porSetor)
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, c]) => '<span class="tag">' + s + ' · ' + c + '</span>').join('');
+    const viaBadge = p.viaAtribuicao > 0
+      ? '<span class="tag" title="Identificado pela atribuição do ticket, não pela 1ª resposta">📋 ' + p.viaAtribuicao + ' via atribuição</span>'
+      : '';
+    return '<div class="person-card" data-idx="' + i + '">' +
+      '<div class="nome">' + p.nome + '</div>' +
+      '<div class="total">' + fmt(p.total) + '</div>' +
+      '<div class="total-lbl">tickets em aberto</div>' +
+      '<div class="meta"><span>Média: ' + (p.mediaDias ?? '—') + ' dias</span><span>Mais antigo: ' + (p.maxDias ?? '—') + ' dias</span></div>' +
+      '<div class="tags">' + tagsHtml + viaBadge + '</div>' +
+    '</div>';
+  }).join('');
+
+  const filaEl = document.getElementById('filaList');
+  const maxFila = Math.max(1, ...D.fila.map(f => f.total));
+  filaEl.innerHTML = D.fila.map(f =>
+    '<div class="fila-row">' +
+      '<span class="setor-nome">' + f.setor + '</span>' +
+      '<span class="bar-track"><span class="bar-fill" style="width:' + Math.round(f.total / maxFila * 100) + '%"></span></span>' +
+      '<span class="setor-total">' + fmt(f.total) + '</span>' +
+    '</div>'
+  ).join('');
+}
 
 const overlay = document.getElementById('detailOverlay');
-cardsEl.addEventListener('click', e => {
+document.getElementById('pessoasCards').addEventListener('click', e => {
   const card = e.target.closest('.person-card');
-  if (!card) return;
-  const p = D.pessoas[Number(card.getAttribute('data-idx'))];
+  if (!card || !CURRENT_D) return;
+  const p = CURRENT_D.pessoas[Number(card.getAttribute('data-idx'))];
   document.getElementById('detailNome').textContent = p.nome;
   document.getElementById('detailMeta').textContent =
     fmt(p.total) + ' tickets — média ' + (p.mediaDias ?? '—') + ' dias em aberto';
   document.getElementById('detailBody').innerHTML = p.tickets.map(t =>
     '<tr><td>' + t.codigo + '</td><td>' + t.tipo + '</td><td>' + t.setor + '</td>' +
-    '<td' + (t.dias!==null && t.dias>30 ? ' class="aging-warn"' : '') + '>' + (t.dias ?? '—') + '</td></tr>'
+    '<td' + (t.dias !== null && t.dias > 30 ? ' class="aging-warn"' : '') + '>' + (t.dias ?? '—') + '</td></tr>'
   ).join('');
   overlay.classList.add('open');
 });
 document.getElementById('detailClose').addEventListener('click', () => overlay.classList.remove('open'));
 overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+
+/* ================= Upload ================= */
+
+const fileCriacao = document.getElementById('fileCriacao');
+const fileUltima = document.getElementById('fileUltima');
+const processarBtn = document.getElementById('processarBtn');
+const uploadStatus = document.getElementById('uploadStatus');
+
+function refreshUploadBtn() {
+  processarBtn.disabled = !(fileCriacao.files && fileCriacao.files.length > 0);
+}
+fileCriacao.addEventListener('change', refreshUploadBtn);
+
+processarBtn.addEventListener('click', async () => {
+  if (!fileCriacao.files.length) return;
+  processarBtn.disabled = true;
+  uploadStatus.className = 'busy';
+  uploadStatus.textContent = 'Lendo e processando a planilha…';
+
+  try {
+    const { tickets: criacaoTix, exportDate: exp1 } = await parseWorkbook(fileCriacao.files[0]);
+    let tickets = criacaoTix;
+    let exportDate = exp1;
+
+    if (fileUltima.files.length) {
+      const { tickets: ultimaTix, exportDate: exp2 } = await parseWorkbook(fileUltima.files[0]);
+      tickets = mergeTickets(criacaoTix, ultimaTix);
+      if (exp2 && (!exportDate || exp2 > exportDate)) exportDate = exp2;
+    }
+
+    const payload = buildPayload(tickets, exportDate, 'THOPEN');
+    render(payload);
+    uploadStatus.className = 'ok';
+    uploadStatus.textContent = '✓ Processado — ' + fmt(payload.totalAbertos) + ' tickets abertos, ' +
+      fmt(payload.totalAtribuido) + ' atribuídos a alguém, ' + fmt(payload.totalFila) + ' na fila.';
+  } catch (err) {
+    uploadStatus.className = 'err';
+    uploadStatus.textContent = 'Erro: ' + err.message;
+  } finally {
+    refreshUploadBtn();
+  }
+});
 </script>
 </body>
 </html>
